@@ -12,10 +12,10 @@ Statik Analiz: Microsoft Roslyn SDK (C# Compiler Platform)
 Yapay Zeka: Google Gemini API (Generative AI)Metodoloji  Agile / Scrum
 
 Ekip ve Rol Dağılımı:
-Yarengül Kocaoğlu: Scrum Master & ArchitectIEEE Standartlarında dökümantasyon (SRS, SDD), UML modelleme, QA süreç yönetimi ve proje koordinasyonu.
-Nergis Albayrak: Backend Developer Roslyn SDK entegrasyonu, AST (Abstract Syntax Tree) analizi, kural tabanlı kod kokusu (Code Smell) motoru.
-Cem Deniz Şahin: AI & Integration Eng. Gemini API asenkron veri akışı, Prompt Engineering, doğruluk testleri ve performans metrikleri.
-Muhammed Hatip: UI/UX Developer WinForms Dashboard tasarımı, dinamik kod editörü entegrasyonu ve analiz raporlama arayüzleri.
+1) Yarengül Kocaoğlu: Scrum Master & ArchitectIEEE Standartlarında dökümantasyon (SRS, SDD), UML modelleme, QA süreç yönetimi ve proje koordinasyonu.
+2) Nergis Albayrak: Backend Developer Roslyn SDK entegrasyonu, AST (Abstract Syntax Tree) analizi, kural tabanlı kod kokusu (Code Smell) motoru.
+3) Cem Deniz Şahin: AI & Integration Eng. Gemini API asenkron veri akışı, Prompt Engineering, doğruluk testleri ve performans metrikleri.
+4) Muhammed Hatip: UI/UX Developer WinForms Dashboard tasarımı, dinamik kod editörü entegrasyonu ve analiz raporlama arayüzleri.
 
     Proje Yol Haritası:
 1) Sprint 1: Kapsam Analizi & Temel Altyapı Kurulumu (Checkpoint-1)
@@ -23,9 +23,9 @@ Muhammed Hatip: UI/UX Developer WinForms Dashboard tasarımı, dinamik kod edit�
 3) Sprint 3: Mimari Tasarım & İlk Geliştirmeler (Checkpoint-3)
 4) Sprint 4: Gelişmiş Özellikler & AI Entegrasyonu (Checkpoint-4)
 5) Sprint 5: Final Testleri & Dağıtım (Checkpoint-5)
-           💻 Kurulum ve Çalıştırma
+            Kurulum ve Çalıştırma
  (Proje geliştirme aşamasındadır)
-1) Bu depoyu klonlayın: git clone https://github.com/kullaniciadi/DeepCode-Analytics.git
+1) Bu depoyu klonlayın: git clone https://github.com/yarengul/DeepCode.git
 2) Visual Studio 2022+ ile çözümü açın.
 3) NuGet paketlerini (Roslyn, Newtonsoft.Json vb.) geri yükleyin.
 4) Kendi Gemini API anahtarınızı yapılandırma dosyasına ekleyin.
