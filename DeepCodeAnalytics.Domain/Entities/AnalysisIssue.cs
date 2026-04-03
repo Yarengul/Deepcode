@@ -1,24 +1,36 @@
-namespace DeepCodeAnalytics.Domain.Entities;
+using System;
 
-/// <summary>
-/// Bir analiz oturumunda Roslyn veya AI tarafından tespit edilen
-/// tek bir hata ya da uyarıyı temsil eden Domain modelidir.
-/// Her Issue, hangi analize ait olduğunu AnalysisResultId ile bilir.
-/// </summary>
-public class AnalysisIssue
+namespace DeepCodeAnalytics.Domain.Entities
 {
-    // Hatayı benzersiz şekilde tanımlayan GUID kimlik bilgisi
-    public Guid Id { get; set; } = Guid.NewGuid();
+    /// <summary>
+    /// Kod analizi sırasında tespit edilen her bir kural ihlalini (Code Smell/Diagnostic) temsil eder.
+    /// Scrum Master'ın gereksinimlerine göre ismi AnalysisIssue olarak belirlenmiştir.
+    /// </summary>
+    public class AnalysisIssue
+    {
+        /// <summary>
+        /// İhlal edilen kuralın özel kimliği (Örneğin: CA1001, LM001).
+        /// </summary>
+        public string DiagnosticId { get; set; } = string.Empty;
 
-    // Bu hatanın hangi analiz oturumuna ait olduğunu gösteren yabancı anahtar
-    public Guid AnalysisResultId { get; set; }
+        /// <summary>
+        /// İhlalin kullanıcıya gösterilecek olan anlaşılır detaylı mesajı.
+        /// </summary>
+        public string Message { get; set; } = string.Empty;
 
-    // Hatanın açıklayıcı mesajı (ör: "Değişken adı küçük harfle başlıyor")
-    public string Message { get; set; } = default!;
+        /// <summary>
+        /// İhlalin ciddiyet seviyesi (Örneğin: Warning, Error, Info).
+        /// </summary>
+        public string Severity { get; set; } = string.Empty;
 
-    // Hatanın önem derecesi: High / Medium / Low
-    public string Severity { get; set; } = default!;
+        /// <summary>
+        /// İhlalin kod içinde bulunduğu satır numarası.
+        /// </summary>
+        public int Line { get; set; }
 
-    // EF Core için ilişkilendirme (AnalysisResult tablosuna Navigation Property)
-    public AnalysisResult AnalysisResult { get; set; } = default!;
+        /// <summary>
+        /// İhlalin kod içinde bulunduğu sütun (karakter) numarası.
+        /// </summary>
+        public int Character { get; set; }
+    }
 }
