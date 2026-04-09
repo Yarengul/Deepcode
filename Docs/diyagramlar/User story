@@ -1,0 +1,138 @@
+USER STORY
+
+1
+Kullanıcı olarak, yazdığım C# kodunu sisteme yükleyebilmek istiyorum, böylece kodumu analiz edebilirim.
+2
+Kullanıcı olarak, kodumu yapıştırarak analiz edebilmek istiyorum, böylece dosya yüklemeden hızlıca test yapabilirim.
+3
+Kullanıcı olarak, analiz sonucunda kodumdaki hataları görebilmek istiyorum, böylece nerede yanlış yaptığımı anlayabilirim.
+4
+Kullanıcı olarak, hataların önem seviyesini (yüksek, orta, düşük) görebilmek istiyorum, böylece öncelikli sorunlara odaklanabilirim.
+5
+Kullanıcı olarak, sistemin bana hataların neden problem olduğunu açıklamasını istiyorum, böylece konuyu daha iyi anlayabilirim.
+
+
+
+
+
+
+
+
+
+
+6
+Kullanıcı olarak, hatalar için önerilen çözümleri görebilmek istiyorum, böylece kodumu nasıl düzelteceğimi öğrenebilirim.
+7
+Kullanıcı olarak, analiz sonuçlarını tek bir ekranda düzenli şekilde görmek istiyorum, böylece karışıklık yaşamam.
+8
+Kullanıcı olarak, geçmiş analizlerime ulaşabilmek istiyorum, böylece önceki hatalarımı tekrar inceleyebilirim.
+9
+Kullanıcı olarak, sistemin hızlı çalışmasını istiyorum, böylece analiz için uzun süre beklemem.
+10
+Kullanıcı olarak, basit ve anlaşılır bir arayüz görmek istiyorum, böylece sistemi zorlanmadan kullanabilirim.
+11
+Kullanıcı olarak, yüklediğim kodun güvenli bir şekilde işlenmesini istiyorum, böylece verilerimin güvende olduğunu bilirim.
+12 
+Kullanıcı olarak, sistemin bana kod kalitesi hakkında genel bir değerlendirme vermesini istiyorum, böylece kodumun genel durumunu anlayabilirim.
+
+
+
+
+
+
+
+ KABUL KRİTERLERİ
+
+1 Kod yükleme
+User Story: Kod yükleyebilmek
+Kabul Kriterleri:
+Kullanıcı sistem üzerinden .cs uzantılı dosya yükleyebilmelidir
+Yüklenen dosya başarıyla okunmalıdır
+Hatalı dosya yüklenirse kullanıcıya uyarı verilmelidir
+
+2 Kod yapıştırma
+User Story: Kod yapıştırarak analiz
+Kabul Kriterleri:
+Kullanıcı metin alanına kod yazabilmelidir
+Boş kod gönderildiğinde analiz başlatılmamalıdır
+Kod alanı düzgün şekilde görüntülenmelidir
+
+3 Hata gösterimi
+User Story: Kod hatalarını görmek
+Kabul Kriterleri:
+Sistem analiz sonrası en az 1 hata gösterebilmelidir
+Hatalar listelenmiş şekilde görünmelidir
+Her hata ayrı bir kart olarak gösterilmelidir
+
+
+
+
+
+
+
+4 Severity gösterimi
+User Story: Önem seviyesi görmek
+Kabul Kriterleri:
+Her hata için “Yüksek / Orta / Düşük” etiketi bulunmalıdır
+Severity renklerle ayırt edilebilmelidir
+Kullanıcı severity bilgisini kolayca fark edebilmelidir
+
+5 Açıklama gösterimi
+User Story: Hatanın nedenini anlamak
+Kabul Kriterleri:
+Her hata için açıklama gösterilmelidir
+Açıklamalar anlaşılır ve kısa olmalıdır
+Teknik terimler mümkün olduğunca sade olmalıdır
+
+6 Çözüm önerisi
+User Story: Hatalar için çözüm görmek
+Kabul Kriterleri:
+Sistem AI üzerinden öneri sunmalıdır
+Her hata için en az 1 çözüm önerisi olmalıdır
+Öneriler okunabilir ve uygulanabilir olmalıdır
+
+7 Düzenli sonuç ekranı
+User Story: Sonuçları düzenli görmek
+Kabul Kriterleri:
+Sonuçlar tek bir panelde gösterilmelidir
+UI karışık olmamalıdır
+Kartlar arası boşluk düzgün olmalıdır
+
+
+
+8 Geçmiş analizler
+User Story: Eski analizlere erişim
+Kabul Kriterleri:
+Sistem analiz geçmişini saklamalıdır
+Kullanıcı geçmiş analizleri liste halinde görebilmelidir
+Seçilen analiz tekrar görüntülenebilmelidir
+
+9 Performans
+User Story: Hızlı analiz
+Kabul Kriterleri:
+Analiz süresi 1 saniyeyi geçmemelidir (küçük kodlar için)
+Sistem donmamalıdır
+Kullanıcıya işlem durumu gösterilmelidir
+
+10 Kullanılabilirlik (UI)
+User Story: Basit arayüz
+Kabul Kriterleri:
+Butonlar kolay erişilebilir olmalıdır
+Kullanıcı 2-3 adımda analiz yapabilmelidir
+Arayüz sade ve anlaşılır olmalıdır
+
+11 Güvenlik
+User Story: Güvenli kullanım
+Kabul Kriterleri:
+Kullanıcı kodu sadece analiz için kullanılmalıdır
+Veriler dış sistemlerle paylaşılmamalıdır
+Sistem hata verdiğinde veri kaybı olmamalıdır
+
+
+
+12 Genel değerlendirme
+User Story: Genel skor görmek
+Kabul Kriterleri:
+Sistem analiz sonunda genel bir skor vermelidir
+Skor 0-100 arası olmalıdır
+Kullanıcı genel durumu kolayca anlayabilmelidir
