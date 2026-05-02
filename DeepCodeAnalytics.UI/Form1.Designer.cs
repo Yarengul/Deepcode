@@ -186,7 +186,7 @@ namespace DeepCodeAnalytics.UI
             this.btnAnalizEt.BackColor = System.Drawing.Color.FromArgb(253, 126, 20); // Orange
             this.btnAnalizEt.ForeColor = System.Drawing.Color.White;
             this.btnAnalizEt.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnAnalizEt.Text = "Analiz Et";
+            this.btnAnalizEt.Text = "▶  Analiz Et";
             this.btnAnalizEt.BorderRadius = 8;
             this.btnAnalizEt.Click += new System.EventHandler(this.btnAnalizEt_Click);
 
@@ -197,16 +197,21 @@ namespace DeepCodeAnalytics.UI
             this.btnDosyaYukle.BackColor = System.Drawing.Color.FromArgb(45, 45, 48);
             this.btnDosyaYukle.ForeColor = System.Drawing.Color.White;
             this.btnDosyaYukle.Font = new System.Drawing.Font("Segoe UI", 10F, System.Drawing.FontStyle.Bold);
-            this.btnDosyaYukle.Text = "Dosya Yükle";
+            this.btnDosyaYukle.Text = "📁  Dosya Yükle";
             this.btnDosyaYukle.BorderRadius = 8;
             this.btnDosyaYukle.Click += new System.EventHandler(this.btnDosyaYukle_Click);
 
-            // lblStatusDot
+            // lblStatusDot — green "Hazır" badge
             this.lblStatusDot.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
-            this.lblStatusDot.Location = new System.Drawing.Point(1175, 33);
-            this.lblStatusDot.Size = new System.Drawing.Size(12, 12);
-            this.lblStatusDot.BackColor = System.Drawing.Color.MediumSeaGreen;
-            this.lblStatusDot.Text = "";
+            this.lblStatusDot.Location = new System.Drawing.Point(1170, 28);
+            this.lblStatusDot.AutoSize = false;
+            this.lblStatusDot.Size = new System.Drawing.Size(70, 24);
+            this.lblStatusDot.BackColor = System.Drawing.Color.FromArgb(30, 60, 30);
+            this.lblStatusDot.ForeColor = System.Drawing.Color.FromArgb(60, 179, 113);
+            this.lblStatusDot.Font = new System.Drawing.Font("Segoe UI", 8.5F, System.Drawing.FontStyle.Bold);
+            this.lblStatusDot.Text = "● Hazır";
+            this.lblStatusDot.TextAlign = System.Drawing.ContentAlignment.MiddleCenter;
+            this.lblStatusDot.BorderRadius = 12;
 
             // --- pnlSidebar ---
             this.pnlSidebar.BackColor = System.Drawing.Color.FromArgb(11, 14, 20); // #0B0E14 deep navy
@@ -353,13 +358,12 @@ namespace DeepCodeAnalytics.UI
             this.pnlEditorHeader.Controls.Add(this.lblEditorLinesBadge);
             this.pnlEditorHeader.Controls.Add(this.lblEditorLangBadge);
 
-            // lblMacDots — window control dots
-            this.lblMacDots.Location = new System.Drawing.Point(12, 12);
-            this.lblMacDots.AutoSize = true;
-            this.lblMacDots.ForeColor = System.Drawing.Color.White;
-            this.lblMacDots.Font = new System.Drawing.Font("Segoe UI", 10F);
-            this.lblMacDots.Text = "\u25CF  \u25CF  \u25CF";
-            this.lblMacDots.ForeColor = System.Drawing.Color.FromArgb(80, 90, 100);
+            // lblMacDots — colored window control dots (Red, Yellow, Green)
+            this.lblMacDots.Location = new System.Drawing.Point(12, 14);
+            this.lblMacDots.AutoSize = false;
+            this.lblMacDots.Size = new System.Drawing.Size(60, 16);
+            this.lblMacDots.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblMacDots.Text = "";
 
             // lblEditorLangBadge — right-aligned C# badge
             this.lblEditorLangBadge.Anchor = System.Windows.Forms.AnchorStyles.Top | System.Windows.Forms.AnchorStyles.Right;
@@ -474,12 +478,12 @@ namespace DeepCodeAnalytics.UI
             this.pnlResultsHeader.Controls.Add(this.lblResultsTitle);
             this.pnlResultsHeader.Controls.Add(this.lblTotalIssuesBadge);
 
-            // lblResultsMacDots
+            // lblResultsMacDots — colored window dots (Paint handler draws Red/Yellow/Green)
             this.lblResultsMacDots.Location = new System.Drawing.Point(12, 14);
-            this.lblResultsMacDots.AutoSize = true;
-            this.lblResultsMacDots.Font = new System.Drawing.Font("Segoe UI", 10F);
-            this.lblResultsMacDots.Text = "\u25CF  \u25CF  \u25CF";
-            this.lblResultsMacDots.ForeColor = System.Drawing.Color.FromArgb(80, 90, 100);
+            this.lblResultsMacDots.AutoSize = false;
+            this.lblResultsMacDots.Size = new System.Drawing.Size(60, 16);
+            this.lblResultsMacDots.Font = new System.Drawing.Font("Segoe UI", 9F);
+            this.lblResultsMacDots.Text = "";
 
             // lblResultsTitle
             this.lblResultsTitle.Location = new System.Drawing.Point(70, 13);

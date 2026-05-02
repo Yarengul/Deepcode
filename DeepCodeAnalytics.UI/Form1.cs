@@ -55,6 +55,10 @@ namespace DeepCodeAnalytics.UI
             pnlEditorHeader.Resize += PnlEditorHeader_Resize;
             pnlResultsHeader.Resize += (s, ev) => PositionResultsHeaderBadge();
 
+            // Colored window dots (Red, Yellow, Green)
+            lblMacDots.Paint += MacDots_Paint;
+            lblResultsMacDots.Paint += MacDots_Paint;
+
             // Position header badges once initially
             PositionEditorHeaderBadges();
             PositionResultsHeaderBadge();
@@ -344,6 +348,19 @@ namespace DeepCodeAnalytics.UI
             lblEditorLangBadge.Location = new Point(lblEditorLinesBadge.Left - lblEditorLangBadge.Width - spacing, y);
         }
 
+        private void MacDots_Paint(object? sender, PaintEventArgs e)
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            int dotSize = 10;
+            int gap = 8;
+            int y = 3;
+            Color[] colors = { Color.FromArgb(255, 95, 87), Color.FromArgb(255, 189, 46), Color.FromArgb(39, 201, 63) };
+            for (int i = 0; i < 3; i++)
+            {
+                using (SolidBrush brush = new SolidBrush(colors[i]))
+                    e.Graphics.FillEllipse(brush, i * (dotSize + gap), y, dotSize, dotSize);
+            }
+        }
         private void PositionResultsHeaderBadge()
         {
             lblTotalIssuesBadge.Location = new Point(pnlResultsHeader.Width - lblTotalIssuesBadge.Width - 12, 11);
@@ -398,7 +415,9 @@ namespace DeepCodeAnalytics.UI
             // UI state: analyzing
             btnAnalizEt.Enabled = false;
             btnAnalizEt.Text = "Analiz Ediliyor...";
-            lblStatusDot.BackColor = Color.FromArgb(253, 126, 20); // Orange = busy
+            lblStatusDot.BackColor = Color.FromArgb(60, 40, 10);
+            lblStatusDot.ForeColor = Color.FromArgb(253, 126, 20);
+            lblStatusDot.Text = "● Analiz...";
             pnlErrorCards.Controls.Clear();
             lblKalitePuani.Text = "%0";
 
@@ -492,8 +511,10 @@ namespace DeepCodeAnalytics.UI
             finally
             {
                 btnAnalizEt.Enabled = true;
-                btnAnalizEt.Text = "Analiz Et";
-                lblStatusDot.BackColor = Color.MediumSeaGreen; // Green = ready
+                btnAnalizEt.Text = "▶  Analiz Et";
+                lblStatusDot.BackColor = Color.FromArgb(30, 60, 30);
+                lblStatusDot.ForeColor = Color.FromArgb(60, 179, 113);
+                lblStatusDot.Text = "● Hazır";
             }
         }
 
