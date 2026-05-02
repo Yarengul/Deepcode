@@ -5,12 +5,3 @@ obj/
 packages/
 *.user
 *.suo
-
-# API anahtarı ve hassas konfigürasyon dosyaları — REPO'YA GİTMESİN!
-appsettings.json
-appsettings.Development.json
-
-# SQLite veritabanı dosyası — runtime'da oluşur, repo'ya girmez
-*.db
-*.db-shm
-*.db-wal

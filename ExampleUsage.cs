@@ -33,6 +33,13 @@ public class Program
         services.AddScoped<IAiResponseParser, AiResponseParser>();
         services.AddScoped<AiAnalysisService>();
         
+        // Roslyn Analyzers (Nergis'in kodları)
+        services.AddTransient<ICodeAnalyzer, DeepCodeAnalytics.Infrastructure.Analyzers.MagicNumberAnalyzer>();
+        services.AddTransient<ICodeAnalyzer, DeepCodeAnalytics.Infrastructure.Analyzers.EmptyCatchAnalyzer>();
+        services.AddTransient<ICodeAnalyzer, DeepCodeAnalytics.Infrastructure.Analyzers.LongMethodAnalyzer>();
+        services.AddTransient<ICodeAnalyzer, DeepCodeAnalytics.Infrastructure.Analyzers.NamingConventionAnalyzer>();
+        services.AddScoped<AnalyzeService>();
+        
         // Entity Framework ve DbContext (SQLite için)
         services.AddDbContext<AppDbContext>(options =>
             options.UseSqlite("Data Source=deepcode.db"));
@@ -61,16 +68,11 @@ public class TestClass
     }
 }";
 
-        string roslynLogs = "Warning: Naming rule violation 'doSomething' should begin with uppercase letter.";
-
         Console.WriteLine("AI Analysis in progress...");
         
         try 
         {
-            var analysisResult = await aiAnalysisService.PerformAnalysisAsync(
-                sampleUserCode, 
-                roslynLogs
-            );
+            var analysisResult = await aiAnalysisService.PerformAnalysisAsync(sampleUserCode);
 
             Console.WriteLine("Analysis Success!");
             Console.WriteLine("--- ISSUES ---");
