@@ -31,3 +31,100 @@ Ekip ve Rol Dağılımı:
 4) Kendi Gemini API anahtarınızı yapılandırma dosyasına ekleyin.
 5) Projeyi Build edip çalıştırın.
    Bu proje Fırat Üniversitesi Yazılım Mühendisliği Bölümü kapsamında geliştirilmektedir.
+
+## Sprint 3 - Analyzer Tests
+
+Sprint 3 kapsamında kod analiz kurallarını (Code Smells) algılayacak çekirdek sınıflar oluşturulmuş ve `AnalyzeService` üzerinde entegre edilmiştir.
+
+### 1. Magic Number Analyzer
+Hatalı Kod Örneği:
+```csharp
+public void Calculate()
+{
+    double result = 3.14 * 5; // 3.14 ve 5 magic number
+}
+```
+Beklenen Servis Çıktısı (JSON):
+```json
+[
+  {
+    "Title": "Sihirli Rakam (Magic Number)",
+    "Severity": "Medium",
+    "Line": 3,
+    "Message": "'3.14' değeri doğrudan kod içine yazılmış. Anlamlı bir isimlendirilmiş sabite (const/readonly) atanmalıdır."
+  },
+  {
+    "Title": "Sihirli Rakam (Magic Number)",
+    "Severity": "Medium",
+    "Line": 3,
+    "Message": "'5' değeri doğrudan kod içine yazılmış. Anlamlı bir isimlendirilmiş sabite (const/readonly) atanmalıdır."
+  }
+]
+```
+
+### 2. Empty Catch Analyzer
+Hatalı Kod Örneği:
+```csharp
+try {
+    DoSomething();
+} catch (Exception ex) {
+    // Sadece yorum var, hata yutuluyor
+}
+```
+Beklenen Servis Çıktısı (JSON):
+```json
+[
+  {
+    "Title": "Boş Catch Bloğu (Empty Catch Block)",
+    "Severity": "High",
+    "Line": 3,
+    "Message": "Catch bloğu içinde hiçbir işlem yapılmıyor. Hata nesnesi yutuluyor ve loglanmıyor."
+  }
+]
+```
+
+### 3. Long Method Analyzer
+Hatalı Kod Örneği:
+```csharp
+public void VeryLongMethod()
+{
+    // ... >30 satır kod ...
+}
+```
+Beklenen Servis Çıktısı (JSON):
+```json
+[
+  {
+    "Title": "Uzun Metot (Long Method)",
+    "Severity": "High",
+    "Line": 1,
+    "Message": "'VeryLongMethod' metodu 35 satır uzunluğunda. Maksimum izin verilen sınır 30 satırdır. Metodu daha küçük parçalara bölmeyi düşünün."
+  }
+]
+```
+
+### 4. Naming Convention Analyzer
+Hatalı Kod Örneği:
+```csharp
+public void calculateTotal() // Küçük harfle başlıyor
+{
+    int a = 5; // a tek harfli
+}
+```
+Beklenen Servis Çıktısı (JSON):
+```json
+[
+  {
+    "Title": "İsimlendirme Hatası (Naming Convention)",
+    "Severity": "Medium",
+    "Line": 1,
+    "Message": "'calculateTotal' metodu küçük harfle başlıyor. Metot isimleri PascalCase olmalıdır."
+  },
+  {
+    "Title": "İsimlendirme Hatası (Naming Convention)",
+    "Severity": "Medium",
+    "Line": 3,
+    "Message": "'a' değişkeni tek harfli. Anlamlı ve açıklayıcı bir isim kullanılmalıdır (izin verilenler: i, j, k, x, y, z)."
+  }
+]
+```
