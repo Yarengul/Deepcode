@@ -5,16 +5,13 @@ namespace DeepCodeAnalytics.Application.Services;
 
 /// <summary>
 /// AI destekli kod analizi iş akışını yöneten Application Servisidir.
-/// GeminiService, AiResponseParser ve AnalysisRepository bileşenlerini
-/// bir araya getirerek uçtan uca analiz sürecini orkestre eder.
+/// GeminiService ve AnalysisRepository bileşenlerini bir araya getirerek
+/// uçtan uca analiz sürecini orkestre eder.
 /// </summary>
 public class AiAnalysisService
 {
     // Gemini API'ye istek atacak servis (Infrastructure'da implement edilir)
     private readonly IGeminiService _geminiService;
-
-    // API cevabını JSON'dan Domain modellerine parse edecek servis
-    private readonly IAiResponseParser _responseParser;
 
     // Analiz sonuçlarını veritabanına kaydedecek repository
     private readonly IAnalysisRepository _repository;
@@ -22,11 +19,9 @@ public class AiAnalysisService
     // Constructor Injection ile bağımlılıklar dışarıdan verilir (DI Container)
     public AiAnalysisService(
         IGeminiService geminiService, 
-        IAiResponseParser responseParser, 
         IAnalysisRepository repository)
     {
         _geminiService = geminiService;
-        _responseParser = responseParser;
         _repository = repository;
     }
 
@@ -38,35 +33,38 @@ public class AiAnalysisService
     /// <param name="roslynViolations">Roslyn'den gelen statik analiz uyarı logları</param>
     public async Task<AnalysisResult> PerformAnalysisAsync(string sourceCode, string roslynViolations, CancellationToken cancellationToken = default)
     {
-        // ADIM 1: Zenginleştirilmiş prompt oluşturulup Gemini API'ye gönderilir
-        // (Prompt içinde hem Roslyn logları hem de kullanıcı kodu bulunur)
-        string aiRawResponse = await _geminiService.AnalyzeCodeAsync(sourceCode, roslynViolations, cancellationToken);
+        // ADIM 1: Zenginleştirilmiş prompt oluşturulup Gemini API'ye gönderilir.
+        // Artık parsing işlemi GeminiService içinde güvenli şekilde yapılıp bize DTO dönüyor.
+        var aiResponse = await _geminiService.AnalyzeCodeAsync(sourceCode, roslynViolations, cancellationToken);
 
-        // ADIM 2: Gelen ham JSON yanıtı DTO nesnelerine ayrıştırılır
-        var parsedData = _responseParser.Parse(aiRawResponse);
+        // Hata durumunda UI'a hata mesajını fırlat (Veritabanına bozuk kayıt atma)
+        if (!aiResponse.IsSuccess)
+        {
+            throw new Exception(aiResponse.ErrorMessage);
+        }
 
-        // ADIM 3: DTO'lar Domain modellerine (Entity'lere) dönüştürülür
+        // ADIM 2: DTO'lar Domain modellerine (Entity'lere) dönüştürülür
         var analysisResult = new AnalysisResult
         {
             OriginalCode = sourceCode,
             CreatedAt = DateTime.UtcNow,
 
-            // Her IssueDto → AnalysisIssue domain nesnesine maplenir
-            Issues = parsedData.Issues.Select(i => new AnalysisIssue
+            // Kartlardaki Sorun ve Açıklamaları AnalysisIssue'ya eşleştiriyoruz
+            Issues = aiResponse.Cards.Select(c => new AnalysisIssue
             {
-                Message = i.Message,
-                Severity = i.Severity
+                Message = $"{c.Sorun} - {c.Aciklama}",
+                Severity = c.Severity
             }).ToList(),
 
-            // Her SuggestionDto → AiSuggestion domain nesnesine maplenir
-            Suggestions = parsedData.Suggestions.Select(s => new AiSuggestion
+            // Kartlardaki Açıklama ve Çözümleri AiSuggestion'a eşleştiriyoruz
+            Suggestions = aiResponse.Cards.Select(c => new AiSuggestion
             {
-                SuggestionText = s.SuggestionText,
-                ProposedCode = s.ProposedCode
+                SuggestionText = c.Aciklama,
+                ProposedCode = c.Cozum
             }).ToList()
         };
 
-        // ADIM 4: Tamamlanan analiz sonucu SQLite veritabanına kaydedilir
+        // ADIM 3: Tamamlanan analiz sonucu SQLite veritabanına kaydedilir
         await _repository.AddAsync(analysisResult, cancellationToken);
         await _repository.SaveChangesAsync(cancellationToken);
 
