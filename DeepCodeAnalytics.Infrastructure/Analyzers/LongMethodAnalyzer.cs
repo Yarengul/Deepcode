@@ -1,68 +1,57 @@
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Diagnostics;
-using System.Collections.Immutable;
+using DeepCodeAnalytics.Application.Interfaces;
+using DeepCodeAnalytics.Domain.Models;
 
 namespace DeepCodeAnalytics.Infrastructure.Analyzers
 {
     /// <summary>
-    /// Bir metot gövdesindeki ifade (statement) veya satır sayısının çok fazla olmasını engeller.
-    /// Single Responsibility kuralını korumayı, metodu sade ve test edilebilir tutmayı amaçlar.
+    /// Çok uzun metotları tespit eder.
+    /// Gövdesi 30 satırdan fazla olan metotlar, okunabilirliği ve bakımı zorlaştırdığı için "High" severity ile raporlanır.
     /// </summary>
-    [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class LongMethodAnalyzer : DiagnosticAnalyzer
+    public class LongMethodAnalyzer : ICodeAnalyzer
     {
-        public const string DiagnosticId = "SM001";
-        private const string Title = "Çok Uzun Metot (Long Method)";
-        private const string MessageFormat = "Metot '{0}' {1} satır(veya ifade) içeriyor. Bu değer önerilen {2} eşik değerinin üzerinde.";
-        private const string Category = "CodeSmell";
+        private const int MaxAllowedLines = 30;
 
-        // Maksimum kabul edilebilir ifade sayısı.
-        private const int MaxAllowedStatements = 20;
-
-        private static readonly DiagnosticDescriptor Rule = new DiagnosticDescriptor(
-            DiagnosticId,
-            Title,
-            MessageFormat,
-            Category,
-            DiagnosticSeverity.Warning,
-            isEnabledByDefault: true);
-
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
-
-        public override void Initialize(AnalysisContext context)
+        public List<AnalysisDiagnostic> Analyze(SyntaxTree tree)
         {
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-            context.EnableConcurrentExecution();
+            var diagnostics = new List<AnalysisDiagnostic>();
+            var root = tree.GetRoot();
 
-            // Metot tanımlamalarını (Node) dinliyoruz
-            context.RegisterSyntaxNodeAction(AnalyzeMethod, SyntaxKind.MethodDeclaration);
-        }
+            // Tüm metot tanımlarını bul
+            var methodDeclarations = root.DescendantNodes().OfType<MethodDeclarationSyntax>();
 
-        private void AnalyzeMethod(SyntaxNodeAnalysisContext context)
-        {
-            var methodDeclaration = (MethodDeclarationSyntax)context.Node;
-
-            // Eğer metodun içine yazılmış gövdesi (body) varsa
-            if (methodDeclaration.Body != null)
+            foreach (var method in methodDeclarations)
             {
-                // Toplam ifade (statement) sayısını C# ağacı üzerinden hesapla
-                int statementCount = methodDeclaration.Body.Statements.Count;
-
-                if (statementCount > MaxAllowedStatements)
+                // Metodun bir gövdesi (süslü parantezli bloğu) varsa
+                if (method.Body != null)
                 {
-                    // Eğer sınır aşılmışsa diagnostic report fırlat
-                    var diagnostic = Diagnostic.Create(
-                        Rule, 
-                        methodDeclaration.Identifier.GetLocation(), 
-                        methodDeclaration.Identifier.Text, 
-                        statementCount, 
-                        MaxAllowedStatements);
-                        
-                    context.ReportDiagnostic(diagnostic);
+                    // Gövdenin başlangıç ve bitiş satırlarını al
+                    var lineSpan = method.Body.GetLocation().GetLineSpan();
+                    int startLine = lineSpan.StartLinePosition.Line;
+                    int endLine = lineSpan.EndLinePosition.Line;
+
+                    // Satır sayısını hesapla (Süslü parantezlerin içi)
+                    int lineCount = endLine - startLine - 1; 
+
+                    if (lineCount > MaxAllowedLines)
+                    {
+                        int methodStartLine = method.GetLocation().GetLineSpan().StartLinePosition.Line + 1; // 1-based
+                        string methodName = method.Identifier.Text;
+
+                        diagnostics.Add(new AnalysisDiagnostic(
+                            title: "Uzun Metot (Long Method)",
+                            severity: "High",
+                            line: methodStartLine,
+                            message: $"'{methodName}' metodu {lineCount} satır uzunluğunda. Maksimum izin verilen sınır {MaxAllowedLines} satırdır. Metodu daha küçük parçalara bölmeyi düşünün."
+                        ));
+                    }
                 }
             }
+
+            return diagnostics;
         }
     }
 }

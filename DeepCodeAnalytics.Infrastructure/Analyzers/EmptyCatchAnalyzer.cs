@@ -1,8 +1,10 @@
+using System.Collections.Generic;
+using System.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
-using Microsoft.CodeAnalysis.Diagnostics;
-using System.Collections.Immutable;
+using DeepCodeAnalytics.Application.Interfaces;
+using DeepCodeAnalytics.Domain.Models;
 
 namespace DeepCodeAnalytics.Infrastructure.Analyzers
 {
@@ -11,48 +13,36 @@ namespace DeepCodeAnalytics.Infrastructure.Analyzers
     /// Yutulan hatalar(swallowed exceptions) genellikle uygulamanın çökmesine engel olur gibi görünse de
     /// debug yapılmasını ve sorunun bulunmasını çok zorlaştırır.
     /// </summary>
-    [DiagnosticAnalyzer(LanguageNames.CSharp)]
-    public class EmptyCatchAnalyzer : DiagnosticAnalyzer
+    public class EmptyCatchAnalyzer : ICodeAnalyzer
     {
-        public const string DiagnosticId = "SM002";
-        private const string Title = "Boş Catch Bloğu (Empty Catch Block)";
-        private const string MessageFormat = "Catch bloğu içinde hiçbir işlem yapılmıyor. Hata nesnesi yutuluyor.";
-        private const string Category = "CodeSmell";
-
-        // Kuralın tanıtımı
-        private static readonly DiagnosticDescriptor Rule = new DiagnosticDescriptor(
-            DiagnosticId,
-            Title,
-            MessageFormat,
-            Category,
-            DiagnosticSeverity.Warning,
-            isEnabledByDefault: true);
-
-        public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(Rule);
-
-        public override void Initialize(AnalysisContext context)
+        public List<AnalysisDiagnostic> Analyze(SyntaxTree tree)
         {
-            // Derleyici tarafında üretilen dosyaları (örn. g.cs) dikkate alma.
-            context.ConfigureGeneratedCodeAnalysis(GeneratedCodeAnalysisFlags.None);
-            
-            // Analizi paralel işlemeye izni ver.
-            context.EnableConcurrentExecution();
+            var diagnostics = new List<AnalysisDiagnostic>();
+            var root = tree.GetRoot();
 
-            // Catch satırını (Node) incelerken SyntaxKind.CatchClause kullanıyoruz.
-            context.RegisterSyntaxNodeAction(AnalyzeSymbol, SyntaxKind.CatchClause);
-        }
+            // Ağaçtaki tüm catch bloklarını bul
+            var catchClauses = root.DescendantNodes().OfType<CatchClauseSyntax>();
 
-        private void AnalyzeSymbol(SyntaxNodeAnalysisContext context)
-        {
-            var catchClause = (CatchClauseSyntax)context.Node;
-
-            // Catch bloğunun içinde hiçbir C# ifadesi (statement) yoksa. 
-            // Varsa block tamamen boştur demektir (yorum satırları hariç).
-            if (catchClause.Block.Statements.Count == 0)
+            foreach (var catchClause in catchClauses)
             {
-                var diagnostic = Diagnostic.Create(Rule, catchClause.GetLocation());
-                context.ReportDiagnostic(diagnostic);
+                // Catch bloğunun içinde hiçbir C# ifadesi (statement) yoksa.
+                // Not: Yorum satırları Roslyn'de "Trivia" olarak kabul edildiği için Statement sayılmazlar.
+                // Dolayısıyla Statements.Count == 0 kontrolü, sadece yorum içeren catch'leri de boş sayar.
+                if (catchClause.Block.Statements.Count == 0)
+                {
+                    var lineSpan = catchClause.GetLocation().GetLineSpan();
+                    int lineNumber = lineSpan.StartLinePosition.Line + 1;
+
+                    diagnostics.Add(new AnalysisDiagnostic(
+                        title: "Boş Catch Bloğu (Empty Catch Block)",
+                        severity: "High", // Hatanın yutulması kritik olabileceği için High olarak ayarlandı
+                        line: lineNumber,
+                        message: "Catch bloğu içinde hiçbir işlem yapılmıyor. Hata nesnesi yutuluyor ve loglanmıyor."
+                    ));
+                }
             }
+
+            return diagnostics;
         }
     }
 }
