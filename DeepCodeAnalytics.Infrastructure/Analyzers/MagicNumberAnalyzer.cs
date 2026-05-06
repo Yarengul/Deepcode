@@ -27,8 +27,8 @@ namespace DeepCodeAnalytics.Infrastructure.Analyzers
             {
                 string valueText = literal.Token.ValueText;
 
-                // 0, 1 ve -1 gibi yaygın olarak kullanılan indeks/sayaç başlangıç değerlerini yoksay
-                if (valueText == "0" || valueText == "1" || valueText == "-1")
+                // 0, 1, -1, 2 (çift/tek, yarım alma), 10, 100 (yüzde hesaplama vb.) gibi yaygın değerleri yoksay (False Positive önlemi)
+                if (valueText == "0" || valueText == "1" || valueText == "-1" || valueText == "2" || valueText == "10" || valueText == "100")
                 {
                     continue;
                 }

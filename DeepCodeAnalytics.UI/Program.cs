@@ -16,9 +16,10 @@ namespace DeepCodeAnalytics.UI
         [STAThread]
         static void Main()
         {
-            // --- Sprint 3: Analyzer Test Kodu Başlangıcı ---
-            RunAnalyzerTests();
-            // --- Sprint 3: Analyzer Test Kodu Bitişi ---
+            // --- Sprint 4: Analyzer Test Kodu Başlangıcı ---
+            var runner = new AnalyzerTestRunner();
+            runner.RunTestsAndGenerateReportAsync().GetAwaiter().GetResult();
+            // --- Sprint 4: Analyzer Test Kodu Bitişi ---
 
             // To customize application configuration such as set high DPI settings or default font,
             // see https://aka.ms/applicationconfiguration.
