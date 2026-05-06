@@ -1,7 +1,6 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Windows.Forms;
-using DeepCodeAnalytics.Application.Interfaces;
 using DeepCodeAnalytics.Application.Services;
 using DeepCodeAnalytics.Infrastructure.Analyzers;
 using DeepCodeAnalytics.Infrastructure.Services;
