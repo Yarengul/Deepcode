@@ -8,7 +8,9 @@ using System.Text.Json;
 using System.Windows.Forms;
 using DeepCodeAnalytics.Application.DTOs;
 using DeepCodeAnalytics.Application.Services;
+using DeepCodeAnalytics.Application.Interfaces;
 using DeepCodeAnalytics.Domain.Entities;
+using DeepCodeAnalytics.Infrastructure.Analyzers;
 using DeepCodeAnalytics.UI.Controls;
 
 namespace DeepCodeAnalytics.UI;
@@ -107,6 +109,11 @@ public partial class Form1 : Form
     /// </summary>
     public Form1(AnalizYoneticisi analizYoneticisi)
     {
+        // --- Eski Backend Entegrasyon Kodları (Referans Amaçlı Korunmuştur) ---
+        // private KodAnalizServisi _kodAnalizServisi;
+        // public void SonuclariGoster(AnalizSonucu sonuc) { ... }
+        // private void btnAnalizEt_Click(object sender, EventArgs e) { ... }
+        // ----------------------------------------------------------------------
         _analizYoneticisi = analizYoneticisi;
 
         DoubleBuffered = true;

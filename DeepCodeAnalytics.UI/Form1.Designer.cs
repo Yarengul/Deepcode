@@ -6,4 +6,3 @@ namespace DeepCodeAnalytics.UI;
 partial class Form1
 {
 }
-

@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Net.Http;
 using System.Windows.Forms;
+using DeepCodeAnalytics.Application.Interfaces;
 using DeepCodeAnalytics.Application.Services;
 using DeepCodeAnalytics.Infrastructure.Analyzers;
 using DeepCodeAnalytics.Infrastructure.Services;
@@ -20,6 +21,12 @@ internal static class Program
             .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
             .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
             .Build();
+
+        // --- Sprint 4: Analyzer Test Kodu Başlangıcı ---
+        // Uygulama her açıldığında uzun sürmemesi için yorum satırına alındı.
+        // var runner = new AnalyzerTestRunner();
+        // runner.RunTestsAndGenerateReportAsync().GetAwaiter().GetResult();
+        // --- Sprint 4: Analyzer Test Kodu Bitişi ---
 
         var analyzers = new List<ICodeAnalyzer>
         {
