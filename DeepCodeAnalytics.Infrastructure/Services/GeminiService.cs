@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -34,6 +35,14 @@ public class GeminiService : IGeminiService
                      "appsettings.json dosyasında 'Gemini:ApiKey' anahtarı bulunamadı!");
     }
 
+    // UI katmanı (config olmadan) çalıştırabilsin diye hafif constructor.
+    // API anahtarı yoksa servis build aşamasında değil, çağrı anında güvenli hata döndürür.
+    public GeminiService(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+        _apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
+    }
+
     /// <summary>
     /// Kullanıcının C# kodunu ve Roslyn statik analiz çıktısını birleştirerek
     /// Gemini API'ye gönderir. Dönen yanıtı parse edip UI'ın 3 kolonlu kart
@@ -44,6 +53,9 @@ public class GeminiService : IGeminiService
     {
         try
         {
+            if (string.IsNullOrWhiteSpace(_apiKey))
+                return GeminiAnalysisResult.Failure("Gemini API anahtarı bulunamadı. 'GEMINI_API_KEY' ortam değişkenini tanımlayın veya appsettings.json kullanın.");
+
             // --- GÜÇLENDİRİLMİŞ PROMPT YAPISININ OLUŞTURULMASI ---
             // Prompt 3 bölümden oluşur:
             //   1) Görev tanımı ve kesin JSON emri
@@ -91,7 +103,7 @@ JSON şeması:
                 "application/json");
 
             // API URL'sine anahtarı query string olarak ekle (Gemini v1beta endpoint)
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key={_apiKey}";
+            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={_apiKey}";
 
             // Asenkron POST isteği at; await sayesinde UI thread bloklanmaz (donmaz)
             var response = await _httpClient.PostAsync(url, content, cancellationToken);
@@ -103,8 +115,11 @@ JSON şeması:
 
             // Diğer başarısız HTTP kodları için (4xx, 5xx) açıklayıcı mesaj döndür
             if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
                 return GeminiAnalysisResult.Failure(
-                    $"Gemini API isteği başarısız. HTTP Durum Kodu: {(int)response.StatusCode} {response.StatusCode}");
+                    $"HTTP {(int)response.StatusCode}: {errorBody}");
+            }
 
             // Yanıt gövdesini string olarak oku (yine asenkron, UI donmaz)
             var jsonStr = await response.Content.ReadAsStringAsync(cancellationToken);
