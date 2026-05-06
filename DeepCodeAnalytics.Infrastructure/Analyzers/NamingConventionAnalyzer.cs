@@ -14,7 +14,8 @@ namespace DeepCodeAnalytics.Infrastructure.Analyzers
     /// </summary>
     public class NamingConventionAnalyzer : ICodeAnalyzer
     {
-        private static readonly string[] AllowedSingleCharVariables = { "i", "j", "k", "x", "y", "z" };
+        // 'e' EventArgs için, 'c' char döngüleri için, '_' discard/kullanılmayan değişkenler için izin verildi (False Positive önlemi)
+        private static readonly string[] AllowedSingleCharVariables = { "i", "j", "k", "x", "y", "z", "e", "c", "_" };
 
         public List<AnalysisDiagnostic> Analyze(SyntaxTree tree)
         {

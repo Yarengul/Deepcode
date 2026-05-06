@@ -1,3 +1,4 @@
+using System;
 using System.Net;
 using System.Text;
 using System.Text.Json;
@@ -63,6 +64,14 @@ public class GeminiService : IGeminiService
         _apiKey = configuration["Gemini:ApiKey"]
                   ?? throw new ArgumentNullException("Gemini:ApiKey",
                      "appsettings.json dosyasında 'Gemini:ApiKey' anahtarı bulunamadı!");
+    }
+
+    // UI katmanı (config olmadan) çalıştırabilsin diye hafif constructor.
+    // API anahtarı yoksa servis build aşamasında değil, çağrı anında güvenli hata döndürür.
+    public GeminiService(HttpClient httpClient)
+    {
+        _httpClient = httpClient;
+        _apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
     }
 
     /// <summary>
@@ -164,6 +173,8 @@ public class GeminiService : IGeminiService
 
             // Diğer başarısız HTTP kodları için (4xx, 5xx) açıklayıcı mesaj döndür
             if (!response.IsSuccessStatusCode)
+            {
+                var errorBody = await response.Content.ReadAsStringAsync();
                 return GeminiAnalysisResult.Failure(
                     $"Groq API isteği başarısız. HTTP Durum Kodu: {(int)response.StatusCode} {response.StatusCode}");
 
