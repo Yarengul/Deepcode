@@ -6,12 +6,14 @@ using System.Text.RegularExpressions;
 using DeepCodeAnalytics.Application.DTOs;
 using DeepCodeAnalytics.Application.Interfaces;
 using Microsoft.Extensions.Configuration;
+using Polly;
+using Polly.Extensions.Http;
 
 namespace DeepCodeAnalytics.Infrastructure.Services;
 
 /// <summary>
-/// Google Gemini API ile HTTP üzerinden iletişim kuran Infrastructure servis sınıfıdır.
-/// IGeminiService arayüzünü uygular; Application katmanı bu sınıfı doğrudan bilmez.
+/// Groq API ile HTTP üzerinden iletişim kuran Infrastructure servis sınıfıdır.
+/// IGeminiService arayüzünü uygular; sınıf adı UI uyumluluğu için korunmuştur.
 /// Tüm HTTP hataları ve JSON parse hataları bu sınıf içinde yakalanır,
 /// uygulama asla crash olmaz; hata bilgisi GeminiAnalysisResult.Failure() ile döner.
 /// </summary>
@@ -22,6 +24,35 @@ public class GeminiService : IGeminiService
 
     // appsettings.json dosyasındaki "Gemini:ApiKey" alanından okunan API anahtarı
     private readonly string _apiKey;
+
+    // (Deniz) Polly retry policy'si: 429 ve 5xx hatalarında devreye girer.
+    // Bu policy static tanımlandığından her istek için yeniden oluşturulmaz (performans).
+    private static readonly IAsyncPolicy<HttpResponseMessage> _retryPolicy =
+        HttpPolicyExtensions
+            // (Deniz) Hangi durumlarda yeniden deneneceğini tanımla:
+            // - HttpRequestException (ağ kopması, DNS hatası)
+            // - 5xx sunucu hataları
+            // - 429 Too Many Requests (Rate Limit)
+            .HandleTransientHttpError()
+            .OrResult(msg => msg.StatusCode == HttpStatusCode.TooManyRequests)
+            // (Deniz) WaitAndRetryAsync: Exponential Backoff ile 3 kez dener.
+            // 1. deneme → 2 saniye bekle
+            // 2. deneme → 4 saniye bekle
+            // 3. deneme → 8 saniye bekle
+            // Jitter (rastgele milisaniye) eklenerek "thundering herd" problemi önlenir.
+            .WaitAndRetryAsync(
+                retryCount: 3,
+                sleepDurationProvider: retryAttempt =>
+                    TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))   // 2^1, 2^2, 2^3
+                    + TimeSpan.FromMilliseconds(new Random().Next(0, 500)), // Jitter
+                onRetry: (outcome, timespan, retryAttempt, context) =>
+                {
+                    // (Deniz) Her retry denemesinde konsola bilgi yaz; production'da ILogger kullanılabilir.
+                    Console.WriteLine(
+                        $"[Retry #{retryAttempt}] Groq API isteği başarısız " +
+                        $"(HTTP {(int?)outcome.Result?.StatusCode} / {outcome.Exception?.Message}). " +
+                        $"{timespan.TotalSeconds:F1} saniye sonra tekrar denenecek...");
+                });
 
     // Constructor: HttpClient ve IConfiguration DI Container tarafından dışarıdan enjekte edilir
     public GeminiService(HttpClient httpClient, IConfiguration configuration)
@@ -45,7 +76,7 @@ public class GeminiService : IGeminiService
 
     /// <summary>
     /// Kullanıcının C# kodunu ve Roslyn statik analiz çıktısını birleştirerek
-    /// Gemini API'ye gönderir. Dönen yanıtı parse edip UI'ın 3 kolonlu kart
+    /// Groq API'ye gönderir. Dönen yanıtı parse edip UI'ın 3 kolonlu kart
     /// yapısına (SORUN / AÇIKLAMA / ÇÖZÜM) uygun GeminiAnalysisResult döndürür.
     /// Timeout, rate limit ve ağ hataları ayrı ayrı yakalanır; uygulama çökmez.
     /// </summary>
@@ -53,47 +84,55 @@ public class GeminiService : IGeminiService
     {
         try
         {
-            if (string.IsNullOrWhiteSpace(_apiKey))
-                return GeminiAnalysisResult.Failure("Gemini API anahtarı bulunamadı. 'GEMINI_API_KEY' ortam değişkenini tanımlayın veya appsettings.json kullanın.");
+            // --- OPTİMİZE EDİLMİŞ SYSTEM PROMPT (Deniz) ---
+            // System prompt ve user prompt Groq'un chat completion formatına ayrıldı.
+            // System prompt: Modelin rolünü, çıktı formatını ve kısıtları tanımlar.
+            // User prompt:   Analiz edilecek kodu ve Roslyn bağlamını içerir.
+            // Bu ayrım sayesinde model "sohbet moduna" girmez, sadece JSON üretir.
 
-            // --- GÜÇLENDİRİLMİŞ PROMPT YAPISININ OLUŞTURULMASI ---
-            // Prompt 3 bölümden oluşur:
-            //   1) Görev tanımı ve kesin JSON emri
-            //   2) Roslyn'den gelen statik analiz ihlalleri (bağlam zenginleştirme)
-            //   3) Kullanıcının analiz ettirmek istediği C# kodu
-            var prompt = $@"Sen bir C# kod kalitesi uzmanısın.
-GÖREV: Aşağıdaki C# kaynak kodunu ve Roslyn statik analiz ihlallerini inceleyerek kod kalitesi sorunlarını tespit et.
-Prensip: Clean Architecture ve SOLID kurallarını baz al.
+            // (Deniz) System prompt: Groq'a kesin talimatlar verir.
+            // "SADECE JSON" emri + markdown yasağı + halüsinasyon önleyici kısıtlar burada.
+            const string systemPrompt =
+                "Sen bir C# kod kalitesi analiz motorusun. " +
+                "GÖREVİN: Sana verilen C# kodundaki kalite sorunlarını tespit etmek.\n\n" +
+                "## KESİN KURALLAR (İhlal ETMEMELİSİN):\n" +
+                "1. Yanıtın YALNIZCA aşağıdaki JSON şemasından oluşmalıdır. " +
+                "Başında veya sonunda HİÇBİR metin, selamlama veya açıklama olmayacak.\n" +
+                "2. Markdown kod blokları (```) KESİNLİKLE YASAKTIR. Sadece ham JSON yaz.\n" +
+                "3. \"results\" dizisindeki her eleman tam olarak şu 4 alandan oluşmalıdır: " +
+                "sorun, aciklama, cozum, severity.\n" +
+                "4. severity değeri YALNIZCA \"High\", \"Medium\" veya \"Low\" olabilir.\n" +
+                "5. Roslyn statik analiz ihlalleri varsa onları da analiz listene ekle.\n" +
+                "6. Kodda hiç sorun yoksa results dizisini BOŞ bırak: {\"results\": []}\n" +
+                "7. 'cozum' alanına yalnızca C# kodu veya somut adımlar yaz; " +
+                "genel tavsiye veya felsefi yorum YAZMA.\n\n" +
+                "## ZORUNLU JSON ŞEMASI:\n" +
+                "{\"results\": [{\"sorun\": \"...\", \"aciklama\": \"...\", \"cozum\": \"...\", \"severity\": \"High|Medium|Low\"}]}";
 
-KRİTİK TALİMAT: Yanıtın SADECE ve YALNIZCA aşağıdaki JSON şemasında olmalıdır.
-Başına veya sonuna hiçbir metin, açıklama, selamlama ekleme.
-```json gibi Markdown kod blokları KESİNLİKLE KULLANMA. Sadece ham JSON yaz.
+            // (Deniz) User prompt: Büyük dosyalarda hallüsinasyonu azaltmak için
+            // Roslyn bağlamı ve kod net başlıklar ile ayrıldı.
+            // Kodun satır sayısını da veriyoruz ki model "kaç satır" göreceğini bilsin.
+            int lineCount = code.Split('\n').Length;
+            string userPrompt =
+                $"## ROSLYN STATİK ANALİZ SONUÇLARI ({(roslynContext.Contains("ihlal bulunamadı") ? "Temiz" : "İhlaller Mevcut")})\n" +
+                $"{roslynContext}\n\n" +
+                $"## ANALİZ EDİLECEK C# KODU ({lineCount} satır)\n" +
+                $"```csharp\n{code}\n```\n\n" +
+                "Yukarıdaki kodu analiz et ve SADECE JSON formatında yanıt ver.";
 
-JSON şeması:
-{{
-  ""results"": [
-    {{
-      ""sorun"": ""Tespit edilen kod problemi veya kural ihlalinin kısa özeti"",
-      ""aciklama"": ""Problemin neden oluştuğunun teknik açıklaması"",
-      ""cozum"": ""Önerilen düzeltilmiş C# kodu veya çözüm adımları"",
-      ""severity"": ""High veya Medium veya Low""
-    }}
-  ]
-}}
-
-### ROSLYN STATİK ANALİZ İHLALLERİ (Bağlam)
-{roslynContext}
-
-### ANALİZ EDİLECEK C# KODU
-{code}";
-
-            // Gemini API'nin beklediği istek gövdesi: contents > parts > text formatı
+            // (Deniz) Groq'un Chat Completion API'si "messages" dizisi bekler:
+            // system mesajı → modelin genel davranışını belirler
+            // user mesajı   → analiz edilecek kod ve bağlam
             var requestBody = new
             {
-                contents = new[]
+                model = "llama3-8b-8192",   // (Deniz) Groq'un hızlı Llama3 modeli; gerekirse değiştir
+                messages = new[]
                 {
-                    new { parts = new[] { new { text = prompt } } }
-                }
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user",   content = userPrompt   }
+                },
+                temperature = 0.1,          // (Deniz) Düşük temperature = daha deterministik, az halüsinasyon
+                max_tokens = 4096           // (Deniz) Büyük dosyalar için yeterli token limiti
             };
 
             // İstek gövdesini JSON'a serialize edip UTF-8 olarak hazırla
@@ -102,40 +141,58 @@ JSON şeması:
                 Encoding.UTF8,
                 "application/json");
 
-            // API URL'sine anahtarı query string olarak ekle (Gemini v1beta endpoint)
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={_apiKey}";
+            // (Deniz) Groq API endpoint'i. Authorization header HttpClient'a DI sırasında
+            // eklenmişse buraya tekrar eklemene gerek yok.
+            // Eğer eklenmemişse aşağıdaki satırı aktif et:
+            // _httpClient.DefaultRequestHeaders.Authorization =
+            //     new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", _apiKey);
+            var url = "https://api.groq.com/openai/v1/chat/completions";
 
-            // Asenkron POST isteği at; await sayesinde UI thread bloklanmaz (donmaz)
-            var response = await _httpClient.PostAsync(url, content, cancellationToken);
+            // --- RETRY MEKANİZMASI İLE HTTP ÇAĞRISI (Deniz) ---
+            // _retryPolicy.ExecuteAsync() mevcut PostAsync çağrısını sarar (wrap eder).
+            // 429 veya 5xx alınırsa policy devreye girerek belirtilen süreler sonra tekrar dener.
+            // Başarılı olursa response doğrudan döner; 3 denemede başarısız olursa son hatayı fırlatır.
+            HttpResponseMessage response;
+            try
+            {
+                response = await _retryPolicy.ExecuteAsync(
+                    async ct => await _httpClient.PostAsync(url, content, ct),
+                    cancellationToken);
+            }
+            catch (Exception retryEx)
+            {
+                // (Deniz) 3 retry sonunda hâlâ hata varsa buraya düşer; uygulama çökmez.
+                return GeminiAnalysisResult.Failure(
+                    $"Groq API'ye 3 deneme sonunda ulaşılamadı. Son hata: {retryEx.Message}");
+            }
 
-            // HTTP 429 (Too Many Requests) → Rate Limit aşıldı; özel mesaj döndür
+            // HTTP 429 (Too Many Requests) → 3 retry sonunda da limit aşıldıysa
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
                 return GeminiAnalysisResult.Failure(
-                    "Gemini API istek limiti (rate limit) aşıldı. Lütfen birkaç saniye bekleyip tekrar deneyin.");
+                    "Groq API istek limiti (rate limit) 3 denemede de aşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin.");
 
             // Diğer başarısız HTTP kodları için (4xx, 5xx) açıklayıcı mesaj döndür
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
                 return GeminiAnalysisResult.Failure(
-                    $"HTTP {(int)response.StatusCode}: {errorBody}");
-            }
+                    $"Groq API isteği başarısız. HTTP Durum Kodu: {(int)response.StatusCode} {response.StatusCode}");
 
             // Yanıt gövdesini string olarak oku (yine asenkron, UI donmaz)
             var jsonStr = await response.Content.ReadAsStringAsync(cancellationToken);
 
-            // Gemini'nin iç yanıt yapısından üretilen metin parçasını çıkar
-            // Yanıt formatı: candidates[0] > content > parts[0] > text
+            // (Deniz) Groq Chat Completion yanıt formatı:
+            // choices[0] > message > content
+            // (Gemini'nin candidates[0] > content > parts[0] > text formatından farklı!)
             using var jsonDocument = JsonDocument.Parse(jsonStr);
             var rawText = jsonDocument.RootElement
-                              .GetProperty("candidates")[0]
+                              .GetProperty("choices")[0]
+                              .GetProperty("message")
                               .GetProperty("content")
-                              .GetProperty("parts")[0]
-                              .GetProperty("text")
                               .GetString() ?? string.Empty;
 
             // --- MARKDOWN TEMIZLEME ---
-            // Bazen Gemini talimata rağmen yanıtı ```json ... ``` bloğuna sarar.
+            // Bazen model talimata rağmen yanıtı ```json ... ``` bloğuna sarar.
             // Regex ile bu bloğu tespit edip içeriği çıkarıyoruz; parse etmeden önce zorunlu.
             var cleanedJson = TemizleMarkdownBloklari(rawText);
 
@@ -147,7 +204,7 @@ JSON şeması:
         {
             // CancellationToken iptal edilmediyse bu timeout'tan kaynaklanıyor demektir
             return GeminiAnalysisResult.Failure(
-                "Gemini API yanıt süresi doldu (timeout). İnternet bağlantınızı kontrol edin ve tekrar deneyin.");
+                "Groq API yanıt süresi doldu (timeout). İnternet bağlantınızı kontrol edin ve tekrar deneyin.");
         }
         catch (TaskCanceledException)
         {
@@ -158,18 +215,18 @@ JSON şeması:
         {
             // DNS çözümlenemedi, bağlantı reddedildi gibi ağ seviyesi hatalar
             return GeminiAnalysisResult.Failure(
-                $"Ağ bağlantısı hatası: Gemini API'ye ulaşılamadı. Detay: {ex.Message}");
+                $"Ağ bağlantısı hatası: Groq API'ye ulaşılamadı. Detay: {ex.Message}");
         }
         catch (Exception ex)
         {
-            // Hiçbir kategorialara girmeyen beklenmedik hata; uygulama çökmez
+            // Hiçbir kategoriye girmeyen beklenmedik hata; uygulama çökmez
             return GeminiAnalysisResult.Failure(
                 $"Beklenmedik bir hata oluştu: {ex.Message}");
         }
     }
 
     /// <summary>
-    /// Gemini'nin bazen yanıta eklediği ```json ... ``` Markdown bloklarını temizler.
+    /// Groq'un bazen yanıta eklediği Markdown bloklarını temizler.
     /// Regex ile blok tespit edilirse yalnızca iç içerik alınır.
     /// Blok yoksa ham metin olduğu gibi döner; her iki durumda da parse güvenlidir.
     /// </summary>
@@ -202,7 +259,7 @@ JSON şeması:
             // Parse başarılı ama "results" alanı boş/null gelmiş olabilir
             if (parsed?.Results == null || parsed.Results.Count == 0)
                 return GeminiAnalysisResult.Failure(
-                    "Gemini analiz sonucu döndürdü ancak herhangi bir sorun tespit edilmedi.");
+                    "Groq analiz sonucu döndürdü ancak herhangi bir sorun tespit edilmedi.");
 
             // Her raw result item'ı UI kartına (AnalysisCardDto) dönüştür ve listeye ekle
             var cards = parsed.Results.Select(r => new AnalysisCardDto
@@ -218,9 +275,9 @@ JSON şeması:
         }
         catch (JsonException)
         {
-            // JSON formatı bozuksa (Gemini yanlış bir şey döndürdüyse) uygulama çökmez
+            // JSON formatı bozuksa (model yanlış bir şey döndürdüyse) uygulama çökmez
             return GeminiAnalysisResult.Failure(
-                "Gemini'den gelen yanıt geçerli bir JSON formatında değil. Lütfen tekrar deneyin.");
+                "Groq'tan gelen yanıt geçerli bir JSON formatında değil. Lütfen tekrar deneyin.");
         }
     }
 
@@ -261,7 +318,7 @@ JSON şeması:
         };
     }
 
-    // Gemini'nin "results" dizisini parse etmek için kullanılan dahili yardımcı sınıf.
+    // Groq'un "results" dizisini parse etmek için kullanılan dahili yardımcı sınıf.
     // Bu sınıf dışarıya açılmaz (private); sadece ParseGeminiJsonToResult metodunda kullanılır.
     private class GeminiRawResponse
     {
