@@ -1,32 +1,39 @@
-using System;
+using System.Collections.Generic;
 using System.Net.Http;
 using System.Windows.Forms;
 using DeepCodeAnalytics.Application.Services;
+using DeepCodeAnalytics.Infrastructure.Analyzers;
 using DeepCodeAnalytics.Infrastructure.Services;
 using Microsoft.Extensions.Configuration;
 
-namespace DeepCodeAnalytics.UI
+namespace DeepCodeAnalytics.UI;
+
+internal static class Program
 {
-    internal static class Program
+    [STAThread]
+    /// <summary>
+    /// Uygulama giriş noktası. Konfigürasyonu yükler, servisleri oluşturur ve Form'u başlatır.
+    /// </summary>
+    private static void Main()
     {
-        [STAThread]
-        static void Main()
+        var configuration = new ConfigurationBuilder()
+            .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+            .Build();
+
+        var analyzers = new List<ICodeAnalyzer>
         {
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true);
+            new MagicNumberAnalyzer(),
+            new EmptyCatchAnalyzer(),
+            new LongMethodAnalyzer(),
+            new NamingConventionAnalyzer()
+        };
 
-            IConfiguration configuration = builder.Build();
+        var analyzeService = new AnalyzeService(analyzers);
+        var groqService = new GroqService(new HttpClient(), configuration);
+        var analizYoneticisi = new AnalizYoneticisi(analyzeService, groqService);
 
-            var httpClient = new HttpClient();
-            var geminiService = new GeminiService(httpClient, configuration);
-            var roslynService = new RoslynAnalyzerService();
-
-            var analizYoneticisi = new AnalizYoneticisi(roslynService, geminiService);
-
-            ApplicationConfiguration.Initialize();
-            
-            System.Windows.Forms.Application.Run(new Form1(analizYoneticisi));
-        }
+        ApplicationConfiguration.Initialize();
+        System.Windows.Forms.Application.Run(new Form1(analizYoneticisi));
     }
 }

@@ -36,10 +36,10 @@ namespace DeepCodeAnalytics.UI.Controls
             this.Size = new Size(150, 40);
             this.BackColor = Color.MediumSlateBlue;
             this.ForeColor = Color.White;
-            this.Resize += new EventHandler(Button_Resize);
+            this.Resize += Button_Resize;
         }
 
-        private void Button_Resize(object sender, EventArgs e)
+        private void Button_Resize(object? sender, EventArgs e)
         {
             if (borderRadius > this.Height)
                 borderRadius = this.Height;
@@ -72,7 +72,7 @@ namespace DeepCodeAnalytics.UI.Controls
             {
                 using (GraphicsPath pathSurface = GetFigurePath(rectSurface, borderRadius))
                 using (GraphicsPath pathBorder = GetFigurePath(rectBorder, borderRadius - borderSize))
-                using (Pen penSurface = new Pen(this.Parent.BackColor, smoothSize))
+                using (Pen penSurface = new Pen(this.Parent?.BackColor ?? this.BackColor, smoothSize))
                 using (Pen penBorder = new Pen(borderColor, borderSize))
                 {
                     pevent.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -101,10 +101,18 @@ namespace DeepCodeAnalytics.UI.Controls
         protected override void OnHandleCreated(EventArgs e)
         {
             base.OnHandleCreated(e);
-            this.Parent.BackColorChanged += new EventHandler(Container_BackColorChanged);
+            if (this.Parent != null)
+                this.Parent.BackColorChanged += Container_BackColorChanged;
         }
 
-        private void Container_BackColorChanged(object sender, EventArgs e)
+        protected override void OnHandleDestroyed(EventArgs e)
+        {
+            if (this.Parent != null)
+                this.Parent.BackColorChanged -= Container_BackColorChanged;
+            base.OnHandleDestroyed(e);
+        }
+
+        private void Container_BackColorChanged(object? sender, EventArgs e)
         {
             this.Invalidate();
         }
