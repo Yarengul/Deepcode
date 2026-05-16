@@ -1,130 +1,55 @@
-  DeepCode Analytics: AI-Powered Hybrid Code AnalysisDeepCode Analytics, C# projelerindeki teknik borçları (Technical Debt) ve yapısal hataları tespit etmek için Microsoft Roslyn SDK'nın kesinliğini ve Google Gemini AI'nın anlamsal gücünü birleştiren hibrit bir statik analiz aracıdır.
+# DeepCode Analytics - AI Destekli Kod Analiz Platformu
 
- Proje Hedefleri 
+DeepCode Analytics, Roslyn tabanlı statik analiz ve RAG (Retrieval-Augmented Generation) destekli yapay zeka analizini birleştiren profesyonel bir kod analiz platformudur.
 
-Hibrit Analiz:Roslyn ile %100 doğru sentaks taraması ve Gemini ile akıllı refactoring önerileri.
-Yüksek Doğruluk: Hibrit model sayesinde %90+ doğruluk oranı.Hız: Veri optimizasyonu ile 1 saniyenin altında analiz sonuçları.
-Temiz Kod: Yazılımcılara sadece hataları değil, çözüm yollarını da öğreten bir rehber.
+## 🚀 Başlangıç
 
-Teknik Altyapı:
-Platform: Windows Desktop (C# WinForms)
-Statik Analiz: Microsoft Roslyn SDK (C# Compiler Platform)
-Yapay Zeka: Google Gemini API (Generative AI)Metodoloji  Agile / Scrum
+Projeyi yerel bilgisayarınızda çalıştırmak için aşağıdaki adımları izleyin.
 
-Ekip ve Rol Dağılımı:
-1) Yarengül Kocaoğlu: Scrum Master & ArchitectIEEE Standartlarında dökümantasyon (SRS, SDD), UML modelleme, QA süreç yönetimi ve proje koordinasyonu.
-2) Nergis Albayrak: Backend Developer Roslyn SDK entegrasyonu, AST (Abstract Syntax Tree) analizi, kural tabanlı kod kokusu (Code Smell) motoru.
-3) Cem Deniz Şahin: AI & Integration Eng. Gemini API asenkron veri akışı, Prompt Engineering, doğruluk testleri ve performans metrikleri.
-4) Muhammed Hatip: UI/UX Developer WinForms Dashboard tasarımı, dinamik kod editörü entegrasyonu ve analiz raporlama arayüzleri.
+### 📋 Gereksinimler
 
-    Proje Yol Haritası:
-1) Sprint 1: Kapsam Analizi & Temel Altyapı Kurulumu (Checkpoint-1)
-2) Sprint 2: Gereksinim Analizi & UML Modelleme (Checkpoint-2)
-3) Sprint 3: Mimari Tasarım & İlk Geliştirmeler (Checkpoint-3)
-4) Sprint 4: Gelişmiş Özellikler & AI Entegrasyonu (Checkpoint-4)
-5) Sprint 5: Final Testleri & Dağıtım (Checkpoint-5)
-            Kurulum ve Çalıştırma
- (Proje geliştirme aşamasındadır)
-1) Bu depoyu klonlayın: git clone https://github.com/yarengul/DeepCode.git
-2) Visual Studio 2022+ ile çözümü açın.
-3) NuGet paketlerini (Roslyn, Newtonsoft.Json vb.) geri yükleyin.
-4) Kendi Gemini API anahtarınızı yapılandırma dosyasına ekleyin.
-5) Projeyi Build edip çalıştırın.
-   Bu proje Fırat Üniversitesi Yazılım Mühendisliği Bölümü kapsamında geliştirilmektedir.
+- [.NET 8.0 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (veya üzeri)
+- Windows (WinForms arayüzü için gereklidir)
 
-## Sprint 3 - Analyzer Tests
+### 🛠️ Kurulum Adımları
 
-Sprint 3 kapsamında kod analiz kurallarını (Code Smells) algılayacak çekirdek sınıflar oluşturulmuş ve `AnalyzeService` üzerinde entegre edilmiştir.
+1. **Depoyu Klonlayın:**
+   ```bash
+   git clone <repo-url>
+   cd "DeepCode YGA"
+   ```
 
-### 1. Magic Number Analyzer
-Hatalı Kod Örneği:
-```csharp
-public void Calculate()
-{
-    double result = 3.14 * 5; // 3.14 ve 5 magic number
-}
-```
-Beklenen Servis Çıktısı (JSON):
-```json
-[
-  {
-    "Title": "Sihirli Rakam (Magic Number)",
-    "Severity": "Medium",
-    "Line": 3,
-    "Message": "'3.14' değeri doğrudan kod içine yazılmış. Anlamlı bir isimlendirilmiş sabite (const/readonly) atanmalıdır."
-  },
-  {
-    "Title": "Sihirli Rakam (Magic Number)",
-    "Severity": "Medium",
-    "Line": 3,
-    "Message": "'5' değeri doğrudan kod içine yazılmış. Anlamlı bir isimlendirilmiş sabite (const/readonly) atanmalıdır."
-  }
-]
-```
+2. **API Anahtarlarını Yapılandırın:**
+   `DeepCodeAnalytics.UI` klasörü içindeki `appsettings.Example.json` dosyasını kopyalayıp adını `appsettings.json` olarak değiştirin ve kendi API anahtarlarınızı girin:
+   - Gemini API Key
+   - Groq API Key
+   - OpenRouter API Key
 
-### 2. Empty Catch Analyzer
-Hatalı Kod Örneği:
-```csharp
-try {
-    DoSomething();
-} catch (Exception ex) {
-    // Sadece yorum var, hata yutuluyor
-}
-```
-Beklenen Servis Çıktısı (JSON):
-```json
-[
-  {
-    "Title": "Boş Catch Bloğu (Empty Catch Block)",
-    "Severity": "High",
-    "Line": 3,
-    "Message": "Catch bloğu içinde hiçbir işlem yapılmıyor. Hata nesnesi yutuluyor ve loglanmıyor."
-  }
-]
-```
+3. **Vektör Veritabanı:**
+   Proje kök dizinindeki `codesearchnet_vector_db.json` ve `tfidf_vocab.json` dosyaları halihazırda eğitilmiş 846 kayıtlık siber güvenlik ve genel kod verisini içerir. Bu dosyalar uygulama çalıştığında otomatik olarak `bin` klasörüne kopyalanacaktır.
 
-### 3. Long Method Analyzer
-Hatalı Kod Örneği:
-```csharp
-public void VeryLongMethod()
-{
-    // ... >30 satır kod ...
-}
-```
-Beklenen Servis Çıktısı (JSON):
-```json
-[
-  {
-    "Title": "Uzun Metot (Long Method)",
-    "Severity": "High",
-    "Line": 1,
-    "Message": "'VeryLongMethod' metodu 35 satır uzunluğunda. Maksimum izin verilen sınır 30 satırdır. Metodu daha küçük parçalara bölmeyi düşünün."
-  }
-]
-```
+4. **Uygulamayı Başlatın:**
+   ```bash
+   dotnet run --project DeepCodeAnalytics.UI
+   ```
 
-### 4. Naming Convention Analyzer
-Hatalı Kod Örneği:
-```csharp
-public void calculateTotal() // Küçük harfle başlıyor
-{
-    int a = 5; // a tek harfli
-}
-```
-Beklenen Servis Çıktısı (JSON):
-```json
-[
-  {
-    "Title": "İsimlendirme Hatası (Naming Convention)",
-    "Severity": "Medium",
-    "Line": 1,
-    "Message": "'calculateTotal' metodu küçük harfle başlıyor. Metot isimleri PascalCase olmalıdır."
-  },
-  {
-    "Title": "İsimlendirme Hatası (Naming Convention)",
-    "Severity": "Medium",
-    "Line": 3,
-    "Message": "'a' değişkeni tek harfli. Anlamlı ve açıklayıcı bir isim kullanılmalıdır (izin verilenler: i, j, k, x, y, z)."
-  }
-]
-```
+## 🧠 Özellikler
+
+- **Çift Motorlu Analiz:** Roslyn motoru ile kesin hataları (SQL Injection, Hardcoded Secrets vb.) bulurken, AI motoru ile bağlamsal öneriler sunar.
+- **Lokal RAG Sistemi:** 846 kayıtlık özel güvenlik veri seti üzerinden yerel TF-IDF vektör araması yaparak AI'ya doğru bağlam sağlar.
+- **Çoklu Model Desteği:** Gemini, Groq ve OpenRouter üzerinden farklı yapay zeka modellerini kullanabilirsiniz.
+- **Hız ve Verimlilik:** Token limit koruması ve asenkron işlem yapısı ile büyük dosyaları dahi hızla analiz eder.
+
+## 📁 Proje Yapısı
+
+- `DeepCodeAnalytics.UI`: WinForms tabanlı kullanıcı arayüzü.
+- `DeepCodeAnalytics.Application`: İş mantığı, servisler ve arayüzler.
+- `DeepCodeAnalytics.Infrastructure`: Roslyn analyzer'lar, API servisleri ve RAG implementasyonu.
+- `DeepCodeAnalytics.Domain`: Veri modelleri ve çekirdek yapılar.
+- `DeepCodeAnalytics.DatasetBuilder`: RAG veritabanını oluşturmak için kullanılan yardımcı araç.
+
+## 🤝 Katkıda Bulunma
+
+1. Yeni bir feature branch oluşturun.
+2. Değişikliklerinizi yapın.
+3. Pull Request açmadan önce `AnalyzeService` testlerini geçtiğinizden emin olun.

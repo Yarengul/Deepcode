@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -16,29 +17,18 @@ using Polly.Retry;
 
 namespace DeepCodeAnalytics.Infrastructure.Services;
 
-public class GeminiService : IGeminiService
+public class OpenRouterService : IGeminiService
 {
     private readonly HttpClient _httpClient;
     private readonly string _apiKey;
     private readonly AsyncRetryPolicy<HttpResponseMessage> _retryPolicy;
 
-    public GeminiService(HttpClient httpClient, IConfiguration configuration)
+    public OpenRouterService(HttpClient httpClient, IConfiguration configuration)
     {
         _httpClient = httpClient;
-        _apiKey = configuration["Gemini:ApiKey"]
-                  ?? throw new ArgumentNullException("Gemini:ApiKey", "appsettings.json dosyasında 'Gemini:ApiKey' anahtarı bulunamadı!");
+        _apiKey = configuration["OpenRouter:ApiKey"]
+                  ?? throw new ArgumentNullException("OpenRouter:ApiKey", "appsettings.json dosyasında 'OpenRouter:ApiKey' anahtarı bulunamadı!");
 
-        _retryPolicy = Policy
-            .HandleResult<HttpResponseMessage>(r => !r.IsSuccessStatusCode)
-            .Or<HttpRequestException>()
-            .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt)));
-    }
-
-    public GeminiService(HttpClient httpClient)
-    {
-        _httpClient = httpClient;
-        _apiKey = Environment.GetEnvironmentVariable("GEMINI_API_KEY") ?? string.Empty;
-        
         _retryPolicy = Policy
             .HandleResult<HttpResponseMessage>(r => !r.IsSuccessStatusCode)
             .Or<HttpRequestException>()
@@ -50,7 +40,7 @@ public class GeminiService : IGeminiService
         try
         {
             if (string.IsNullOrWhiteSpace(_apiKey))
-                return GeminiAnalysisResult.Failure("Gemini API anahtarı bulunamadı. Lütfen kontrol edin.");
+                return GeminiAnalysisResult.Failure("OpenRouter API anahtarı bulunamadı. Lütfen kontrol edin.");
 
             const string systemPrompt =
                 "Sen bir C# kod kalitesi analiz motorusun. " +
@@ -64,62 +54,31 @@ public class GeminiService : IGeminiService
                 "4. severity değeri YALNIZCA \"High\", \"Medium\" veya \"Low\" olabilir.\n" +
                 "5. Roslyn statik analiz ihlalleri varsa onları da analiz listene ekle.\n" +
                 "6. Kodda hiç sorun yoksa results dizisini BOŞ bırak: {\"results\": []}\n" +
-                "7. 'cozum' alanına yalnızca C# kodu veya somut adımlar yaz; " +
-                "genel tavsiye veya felsefi yorum YAZMA.\n\n" +
+                "7. 'cozum' alanına yalnızca C# kodu veya somut adımlar yaz.\n\n" +
                 "## ZORUNLU JSON ŞEMASI:\n" +
                 "{\"results\": [{\"sorun\": \"...\", \"aciklama\": \"...\", \"cozum\": \"...\", \"severity\": \"High|Medium|Low\"}]}";
 
             int lineCount = code.Split('\n').Length;
             string userPrompt =
-                $"{systemPrompt}\n\n" +
                 $"## ROSLYN STATİK ANALİZ SONUÇLARI ({(roslynContext.Contains("ihlal bulunamadı") ? "Temiz" : "İhlaller Mevcut")})\n" +
                 $"{roslynContext}\n\n" +
                 $"## ANALİZ EDİLECEK C# KODU ({lineCount} satır)\n" +
                 $"```csharp\n{code}\n```\n\n" +
                 "Yukarıdaki kodu analiz et ve SADECE JSON formatında yanıt ver.";
 
-            // Gemini API Formatı
             var requestBody = new
             {
-                contents = new[]
+                model = "deepseek/deepseek-v4-flash:free", // Sabit ve kararlı bir ücretsiz model kullanıyoruz
+                messages = new[]
                 {
-                    new
-                    {
-                        parts = new[] { new { text = userPrompt } }
-                    }
+                    new { role = "system", content = systemPrompt },
+                    new { role = "user", content = userPrompt }
                 },
-                generationConfig = new
-                {
-                    temperature = 0.1,
-                    responseMimeType = "application/json",
-                    responseSchema = new
-                    {
-                        type = "OBJECT",
-                        properties = new
-                        {
-                            results = new
-                            {
-                                type = "ARRAY",
-                                items = new
-                                {
-                                    type = "OBJECT",
-                                    properties = new
-                                    {
-                                        sorun = new { type = "STRING" },
-                                        aciklama = new { type = "STRING" },
-                                        cozum = new { type = "STRING" },
-                                        severity = new { type = "STRING" }
-                                    },
-                                    required = new[] { "sorun", "aciklama", "cozum", "severity" }
-                                }
-                            }
-                        },
-                        required = new[] { "results" }
-                    }
-                }
+                temperature = 0.1
+                // response_format = new { type = "json_object" } // Kaldırıldı: Çoğu ücretsiz model bunu desteklemediği için hata fırlatıyor.
             };
 
-            var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
+            var url = "https://openrouter.ai/api/v1/chat/completions";
 
             HttpResponseMessage response;
             try
@@ -131,41 +90,54 @@ public class GeminiService : IGeminiService
                             JsonSerializer.Serialize(requestBody),
                             Encoding.UTF8,
                             "application/json");
-                        return await _httpClient.PostAsync(url, content, ct);
+
+                        using var req = new HttpRequestMessage(HttpMethod.Post, url);
+                        req.Headers.Authorization = new AuthenticationHeaderValue("Bearer", _apiKey);
+                        req.Headers.Add("HTTP-Referer", "http://localhost"); 
+                        req.Headers.Add("X-Title", "DeepCode Analytics"); 
+                        req.Content = content;
+
+                        return await _httpClient.SendAsync(req, ct);
                     },
                     cancellationToken);
             }
             catch (Exception retryEx)
             {
-                return GeminiAnalysisResult.Failure($"Gemini API'ye ulaşılamadı. Son hata: {retryEx.Message}");
+                return GeminiAnalysisResult.Failure($"OpenRouter API'ye ulaşılamadı. Son hata: {retryEx.Message}");
             }
 
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                return GeminiAnalysisResult.Failure("Gemini API istek limiti (rate limit) aşıldı. Lütfen birkaç dakika bekleyip tekrar deneyin.");
+                return GeminiAnalysisResult.Failure("OpenRouter API istek limiti aşıldı.");
 
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync();
-                return GeminiAnalysisResult.Failure($"Gemini API isteği başarısız. HTTP {(int)response.StatusCode}: {errorBody}");
+                return GeminiAnalysisResult.Failure($"OpenRouter API isteği başarısız. HTTP {(int)response.StatusCode}: {errorBody}");
             }
 
+            var rawText = "";
             var jsonStr = await response.Content.ReadAsStringAsync(cancellationToken);
-            using var jsonDocument = JsonDocument.Parse(jsonStr);
+            try
+            {
+                using var jsonDocument = JsonDocument.Parse(jsonStr);
 
-            // Gemini yanıt formatını parse et
-            var rawText = jsonDocument.RootElement
-                              .GetProperty("candidates")[0]
-                              .GetProperty("content")
-                              .GetProperty("parts")[0]
-                              .GetProperty("text")
-                              .GetString() ?? string.Empty;
+                rawText = jsonDocument.RootElement
+                                  .GetProperty("choices")[0]
+                                  .GetProperty("message")
+                                  .GetProperty("content")
+                                  .GetString() ?? string.Empty;
 
-            var cleanedJson = TemizleMarkdownBloklari(rawText);
-            return ParseGeminiJsonToResult(cleanedJson);
+                var cleanedJson = TemizleMarkdownBloklari(rawText);
+                return ParseGeminiJsonToResult(cleanedJson);
+            }
+            catch (Exception ex)
+            {
+                return GeminiAnalysisResult.Failure($"Beklenmedik hata (KeyNotFound): {ex.Message} | Gelen JSON: {jsonStr}");
+            }
         }
         catch (Exception ex)
         {
-            return GeminiAnalysisResult.Failure($"Beklenmedik bir hata oluştu: {ex.Message}");
+            return GeminiAnalysisResult.Failure($"API isteği sırasında hata oluştu: {ex.Message}");
         }
     }
 
@@ -183,7 +155,7 @@ public class GeminiService : IGeminiService
             var parsed = JsonSerializer.Deserialize<GeminiRawResponse>(cleanedJson, options);
 
             if (parsed?.Results == null || parsed.Results.Count == 0)
-                return GeminiAnalysisResult.Failure("Gemini analiz sonucu döndürdü ancak herhangi bir sorun tespit edilmedi.");
+                return GeminiAnalysisResult.Failure("OpenRouter analiz sonucu döndürdü ancak sorun tespit edilmedi.");
 
             var cards = parsed.Results.Select(r => new AnalysisCardDto
             {
@@ -195,10 +167,9 @@ public class GeminiService : IGeminiService
 
             return new GeminiAnalysisResult { IsSuccess = true, Cards = cards };
         }
-        catch (JsonException ex)
+        catch (JsonException)
         {
-            var preview = cleanedJson.Length > 150 ? cleanedJson.Substring(0, 150) + "..." : cleanedJson;
-            return GeminiAnalysisResult.Failure($"Gemini'den gelen yanıt geçerli bir JSON değil. Gelen yanıt: {preview}");
+            return GeminiAnalysisResult.Failure("OpenRouter'dan gelen yanıt geçerli bir JSON değil.");
         }
     }
 

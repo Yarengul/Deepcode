@@ -33,12 +33,19 @@ internal static class Program
             new MagicNumberAnalyzer(),
             new EmptyCatchAnalyzer(),
             new LongMethodAnalyzer(),
-            new NamingConventionAnalyzer()
+            new NamingConventionAnalyzer(),
+            new SqlInjectionAnalyzer(),       // SQL Injection tespiti
+            new HardcodedSecretAnalyzer()     // Hardcoded şifre/bağlantı tespiti
         };
 
         var analyzeService = new AnalyzeService(analyzers);
-        var groqService = new GroqService(new HttpClient(), configuration);
-        var analizYoneticisi = new AnalizYoneticisi(analyzeService, groqService);
+        var aiFactory = new AiProviderFactory(new HttpClient(), configuration);
+        
+        // RAG Servisleri — TF-IDF: API gerekmez, tfidf_vocab.json'dan yüklenir
+        var embeddingService = new TfIdfEmbeddingService(configuration);
+        var vectorStore = new LocalVectorStore(embeddingService);
+        
+        var analizYoneticisi = new AnalizYoneticisi(analyzeService, aiFactory, embeddingService, vectorStore);
 
         ApplicationConfiguration.Initialize();
         System.Windows.Forms.Application.Run(new Form1(analizYoneticisi));

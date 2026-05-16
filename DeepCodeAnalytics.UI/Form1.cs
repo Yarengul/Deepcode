@@ -31,6 +31,7 @@ public partial class Form1 : Form
     private readonly RoundedButton _btnDosyaYukle = new();
     private readonly RoundedButton _btnAnalizEt = new();
     private readonly RoundedLabel _lblStatusDot = new();
+    private readonly ComboBox _cmbAiProvider = new();
 
     // ===== UI: sidebar =====
     private readonly Panel _pnlSidebar = new();
@@ -217,9 +218,20 @@ public partial class Form1 : Form
         _lblStatusDot.TextAlign = ContentAlignment.MiddleCenter;
         _lblStatusDot.BorderRadius = 12;
 
+        _cmbAiProvider.Size = new Size(130, 40);
+        _cmbAiProvider.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cmbAiProvider.BackColor = Color.FromArgb(45, 45, 48);
+        _cmbAiProvider.ForeColor = Color.White;
+        _cmbAiProvider.Font = FontTextBold;
+        _cmbAiProvider.FlatStyle = FlatStyle.Flat;
+        _cmbAiProvider.Items.AddRange(new object[] { "Groq", "Gemini", "OpenRouter" });
+        _cmbAiProvider.SelectedIndex = 0; // Varsayılan Groq
+        _cmbAiProvider.Cursor = Cursors.Hand;
+
         _pnlTopHeader.Controls.Add(_lblLogoSquare);
         _pnlTopHeader.Controls.Add(_lblLogo);
         _pnlTopHeader.Controls.Add(_lblSubtitle);
+        _pnlTopHeader.Controls.Add(_cmbAiProvider);
         _pnlTopHeader.Controls.Add(_btnDosyaYukle);
         _pnlTopHeader.Controls.Add(_btnAnalizEt);
         _pnlTopHeader.Controls.Add(_lblStatusDot);
@@ -597,6 +609,9 @@ public partial class Form1 : Form
         _btnAnalizEt.Location = new Point(right - _btnAnalizEt.Width, yButton);
         right = _btnAnalizEt.Left - 10;
 
+        _cmbAiProvider.Location = new Point(right - _cmbAiProvider.Width, yButton + 7);
+        right = _cmbAiProvider.Left - 10;
+
         _btnDosyaYukle.Location = new Point(right - _btnDosyaYukle.Width, yButton);
     }
 
@@ -657,7 +672,11 @@ public partial class Form1 : Form
         SetAnalyzingUi(true);
         try
         {
-            var result = await _analizYoneticisi.AnalizEtAsync(code);
+            var selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.Groq;
+            if (_cmbAiProvider.SelectedItem?.ToString() == "Gemini") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.Gemini;
+            else if (_cmbAiProvider.SelectedItem?.ToString() == "OpenRouter") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.OpenRouter;
+
+            var result = await _analizYoneticisi.AnalizEtAsync(code, selectedEngine);
             RenderIssues(result.Issues);
             RenderAiSuggestions(result.Suggestions.FirstOrDefault()?.SuggestionText);
         }
