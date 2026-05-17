@@ -31,7 +31,7 @@ public class GroqService : IGeminiService
 
     /// <summary>
     /// Verilen C# kodu ve Roslyn çıktısını Groq (OpenAI uyumlu) endpoint'ine gönderir.
-    /// Dönen içeriği GeminiService ile aynı JSON şemasına parse eder.
+    /// Dönen içeriği aynı JSON şemasına parse eder.
     /// </summary>
     public async Task<GeminiAnalysisResult> AnalyzeCodeAsync(string code, string roslynContext, CancellationToken cancellationToken = default)
     {
@@ -73,7 +73,8 @@ JSON şeması:
                 {
                     new { role = "user", content = prompt }
                 },
-                temperature = 0.2
+                temperature = 0.2,
+                response_format = new { type = "json_object" }
             };
 
             // OpenAI uyumlu chat/completions isteği
@@ -102,9 +103,9 @@ JSON şeması:
                 .GetProperty("content")
                 .GetString() ?? string.Empty;
 
-            // GeminiService ile aynı şekilde olası Markdown bloklarını temizle
+            // Olası Markdown bloklarını temizle
             var cleanedJson = TemizleMarkdownBloklari(rawText);
-            return ParseGeminiJsonToResult(cleanedJson);
+            return ParseGroqJsonToResult(cleanedJson);
         }
         catch (TaskCanceledException ex) when (!ex.CancellationToken.IsCancellationRequested)
         {
@@ -133,12 +134,12 @@ JSON şeması:
     /// <summary>
     /// AI yanıtındaki JSON'u UI kart DTO'larına dönüştürür.
     /// </summary>
-    private static GeminiAnalysisResult ParseGeminiJsonToResult(string cleanedJson)
+    private static GeminiAnalysisResult ParseGroqJsonToResult(string cleanedJson)
     {
         try
         {
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
-            var parsed = JsonSerializer.Deserialize<GeminiRawResponse>(cleanedJson, options);
+            var parsed = JsonSerializer.Deserialize<GroqRawResponse>(cleanedJson, options);
 
             if (parsed?.Results == null || parsed.Results.Count == 0)
                 return GeminiAnalysisResult.Failure("AI analiz sonucu döndürdü ancak herhangi bir sorun tespit edilmedi.");
@@ -159,12 +160,12 @@ JSON şeması:
         }
     }
 
-    private sealed class GeminiRawResponse
+    private sealed class GroqRawResponse
     {
-        public List<GeminiRawCard> Results { get; set; } = new();
+        public List<GroqRawCard> Results { get; set; } = new();
     }
 
-    private sealed class GeminiRawCard
+    private sealed class GroqRawCard
     {
         public string? Sorun { get; set; }
         public string? Aciklama { get; set; }

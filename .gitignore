@@ -1,8 +1,24 @@
+# .NET artifacts
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+
+# Visual Studio files
 .vs/
-bin/
-obj/
-.nuget/
-packages/
 *.user
 *.suo
-**/appsettings.json
+*.userosscache
+*.sln.docstates
+
+# NuGet packages
+packages/
+.nuget/
+
+# Secrets (IMPORTANT)
+appsettings.json
+rag_debug.log
+
+# OS files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
