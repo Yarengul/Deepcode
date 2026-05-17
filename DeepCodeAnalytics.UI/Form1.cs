@@ -41,6 +41,21 @@ public partial class Form1 : Form
     private readonly Button _btnAbout = new();
     private readonly Label _lblVersion = new();
 
+    // ===== UI: sidebar bottom theme switch =====
+    private readonly Panel _pnlSidebarBottom = new();
+    private readonly Label _lblSidebarTheme = new();
+    private readonly RoundedButton _btnSidebarThemeToggle = new();
+
+    // ===== UI: sidebar bottom user profile & logout =====
+    private readonly Panel _pnlUserProfile = new();
+    private readonly RoundedPanel _pnlUserCard = new();
+    private readonly RoundedPanel _pnlUserAvatar = new();
+    private readonly Label _lblUserName = new();
+    private readonly Label _lblUserRole = new();
+    private readonly Label _btnLogout = new();
+
+    public bool IsLoggingOut { get; private set; } = false;
+
     // ===== UI: center =====
     private readonly TableLayoutPanel _tblCenter = new();
     private readonly Panel _pnlCenterDivider = new();
@@ -85,6 +100,27 @@ public partial class Form1 : Form
     private readonly Label _lblMedium = new();
     private readonly Label _lblLow = new();
 
+    // ===== UI: Dinamik Ek Sayfalar (History, Settings, About) =====
+    private readonly Panel _pnlHistory = new();
+    private readonly Panel _pnlSettings = new();
+    private readonly Panel _pnlAbout = new();
+
+    // ===== UI: Tema Değiştirme ve Gelişmiş Ayar Bileşenleri =====
+    private bool _isDarkMode = true;
+    private readonly RoundedPanel _pnlDarkCard = new();
+    private readonly RoundedPanel _pnlLightCard = new();
+    private readonly Label _lblDarkCheck = new();
+    private readonly Label _lblLightCheck = new();
+
+    private readonly ComboBox _cmbSettingsAiModel = new();
+    private readonly CheckBox _chkSqlInjection = new();
+    private readonly CheckBox _chkHardcodedSecrets = new();
+    private readonly CheckBox _chkAutoStart = new();
+    private readonly Label _lblGeminiApiStatus = new();
+    private readonly Label _lblGroqApiStatus = new();
+    private readonly RoundedButton _btnEditApiKeys = new();
+
+
     // ===== Two views =====
     private enum ViewMode { PreAnalyze, PostAnalyze }
     private ViewMode _viewMode = ViewMode.PreAnalyze;
@@ -110,15 +146,13 @@ public partial class Form1 : Form
     /// </summary>
     public Form1(AnalizYoneticisi analizYoneticisi)
     {
-        // --- Eski Backend Entegrasyon Kodları (Referans Amaçlı Korunmuştur) ---
-        // private KodAnalizServisi _kodAnalizServisi;
-        // public void SonuclariGoster(AnalizSonucu sonuc) { ... }
-        // private void btnAnalizEt_Click(object sender, EventArgs e) { ... }
-        // ----------------------------------------------------------------------
         _analizYoneticisi = analizYoneticisi;
 
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
+        this.Size = new Size(1280, 800);
+        this.StartPosition = FormStartPosition.CenterScreen;
+
 
         _sidebarFadeTimer = new System.Windows.Forms.Timer { Interval = 16 };
         _sidebarFadeTimer.Tick += SidebarFadeTimer_Tick;
@@ -128,6 +162,7 @@ public partial class Form1 : Form
         WireUi();
 
         ApplyView(ViewMode.PreAnalyze);
+        ApplyTheme();
 
         Shown += (_, _) =>
         {
@@ -235,46 +270,144 @@ public partial class Form1 : Form
         _pnlTopHeader.Controls.Add(_btnDosyaYukle);
         _pnlTopHeader.Controls.Add(_btnAnalizEt);
         _pnlTopHeader.Controls.Add(_lblStatusDot);
-
-        // Main table
+        // Ana Layout (Sidebar solda sabit, sağ kısım tek satırlı yapı)
         _tblMain.Dock = DockStyle.Fill;
         _tblMain.BackColor = Color.FromArgb(18, 18, 18);
         _tblMain.CellBorderStyle = TableLayoutPanelCellBorderStyle.None;
         _tblMain.ColumnCount = 3;
         _tblMain.RowCount = 1;
-        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240F));
-        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400F));
-        _tblMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240F)); // Kolon 0: Sidebar
+        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));  // Kolon 1: Editör / Merkez
+        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400F)); // Kolon 2: Sonuçlar / Sağ Panel
+        _tblMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));        // Satır 0: Editör ve Sonuçlar
         _tblRoot.Controls.Add(_tblMain, 0, 1);
 
-        // Sidebar
+
+        // Sidebar — Minimalist tasarım
         _pnlSidebar.Dock = DockStyle.Fill;
         _pnlSidebar.BackColor = SidebarBg;
         _pnlSidebar.Padding = new Padding(0, 16, 0, 0);
         _pnlSidebar.BorderStyle = BorderStyle.None;
         _tblMain.Controls.Add(_pnlSidebar, 0, 0);
 
-        ConfigureSidebarButton(_btnDashboard, new Point(12, 8), nameof(_btnDashboard));
-        ConfigureSidebarButton(_btnHistory, new Point(12, 64), nameof(_btnHistory));
-        ConfigureSidebarButton(_btnSettings, new Point(12, 120), nameof(_btnSettings));
-        ConfigureSidebarButton(_btnAbout, new Point(12, 176), nameof(_btnAbout));
+        // Navigasyon butonları (sabit koordinatlarla temiz dikey sıralama)
+        ConfigureSidebarButton(_btnDashboard, new Point(12, 16), nameof(_btnDashboard));
+        ConfigureSidebarButton(_btnHistory, new Point(12, 72), nameof(_btnHistory));
+        ConfigureSidebarButton(_btnSettings, new Point(12, 128), nameof(_btnSettings));
+        ConfigureSidebarButton(_btnAbout, new Point(12, 184), nameof(_btnAbout));
 
+        // Versiyon Etiketi (Dock.Bottom - en altta)
         _lblVersion.Dock = DockStyle.Bottom;
-        _lblVersion.Height = 35;
-        _lblVersion.TextAlign = ContentAlignment.MiddleCenter;
+        _lblVersion.Height = 45; // Alt boşluk bırakmak için yükseklik artırıldı
+        _lblVersion.TextAlign = ContentAlignment.TopCenter; // Üste yasla
+        _lblVersion.Padding = new Padding(0, 5, 0, 0); // Üstten 5px boşluk
         _lblVersion.ForeColor = Color.FromArgb(60, 65, 75);
         _lblVersion.Font = new Font("Segoe UI", 8F, FontStyle.Regular);
         _lblVersion.Text = "Version 1.0.0";
         _lblVersion.BackColor = SidebarBg;
 
+        // Tema Toggle Paneli (Dock.Bottom - versiyon'un hemen üstünde)
+        _pnlSidebarBottom.Dock = DockStyle.Bottom;
+        _pnlSidebarBottom.Height = 60; // 50'den 60'a çıkarılarak ferahlatıldı
+        _pnlSidebarBottom.BackColor = Color.Transparent;
+
+        _lblSidebarTheme.Text = "Koyu Tema";
+        _lblSidebarTheme.Location = new Point(20, 20); // 16'dan 20'ye kaydırıldı
+        _lblSidebarTheme.AutoSize = true;
+        _lblSidebarTheme.Font = FontTextBold;
+        _lblSidebarTheme.ForeColor = InactiveText;
+        _lblSidebarTheme.BackColor = Color.Transparent;
+
+        _btnSidebarThemeToggle.Size = new Size(54, 28);
+        _btnSidebarThemeToggle.Location = new Point(166, 16); // Sağdan 20px padding
+        _btnSidebarThemeToggle.BorderRadius = 14;
+        _btnSidebarThemeToggle.BorderSize = 0;
+        _btnSidebarThemeToggle.Cursor = Cursors.Hand;
+        _btnSidebarThemeToggle.Click += btnThemeToggle_Click;
+        _btnSidebarThemeToggle.Paint += (s, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            Color bg = _isDarkMode ? Color.FromArgb(0, 122, 204) : Color.FromArgb(200, 200, 205);
+            using var bgBrush = new SolidBrush(bg);
+            e.Graphics.FillPath(bgBrush, GetRoundedPath(_btnSidebarThemeToggle.ClientRectangle, 14));
+            int circleSize = 20;
+            int y = (28 - circleSize) / 2;
+            int x = _isDarkMode ? (54 - circleSize - 4) : 4;
+            using var circleBrush = new SolidBrush(Color.White);
+            e.Graphics.FillEllipse(circleBrush, new Rectangle(x, y, circleSize, circleSize));
+        };
+
+        _pnlSidebarBottom.Controls.Add(_lblSidebarTheme);
+        _pnlSidebarBottom.Controls.Add(_btnSidebarThemeToggle);
+
+        // Kullanıcı Giriş / Profil Kartı (Dock.Bottom - Tema panelinin hemen üstünde)
+        _pnlUserProfile.Dock = DockStyle.Bottom;
+        _pnlUserProfile.Height = 70; // 85'ten 70'e düşürüldü (daha kompakt)
+        _pnlUserProfile.BackColor = Color.Transparent;
+
+        _pnlUserCard.Size = new Size(216, 52); // Sidebar 240px. 216 genişlik = sağdan ve soldan 12px margin
+        _pnlUserCard.Location = new Point(12, 8); // Sola kaydırıldı (X=12), navigasyon butonları ile tam hizalı
+        _pnlUserCard.Anchor = AnchorStyles.Top | AnchorStyles.Left; // AnchorRight kaldırıldı (esneme yapıp kesilmesini engeller)
+        _pnlUserCard.BorderRadius = 12;
+        _pnlUserCard.BorderSize = 1;
+        _pnlUserCard.DrawShadow = false;
+
+        _pnlUserAvatar.Size = new Size(32, 32); // 40x40'tan 32x32'ye küçültüldü
+        _pnlUserAvatar.Location = new Point(10, 10); // Dikey ortalama ((52-32)/2 = 10)
+        _pnlUserAvatar.BorderRadius = 16; // Daire şeklinde avatar
+        _pnlUserAvatar.BorderSize = 0;
+        _pnlUserAvatar.BackColor = Color.FromArgb(0, 122, 204); // DeepCode Mavi
+        _pnlUserAvatar.Paint += (s, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+            using var font = new Font("Segoe UI", 9.5F, FontStyle.Bold); // Yazı boyutu hafif küçüldü
+            TextRenderer.DrawText(e.Graphics, "AD", font, _pnlUserAvatar.ClientRectangle, Color.White,
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
+        };
+
+        _lblUserName.AutoSize = true;
+        _lblUserName.Location = new Point(54, 9); // X=54 (Avatar bittikten sonra 12px boşluk)
+        _lblUserName.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold); // 9.5F -> 9F
+        _lblUserName.BackColor = Color.Transparent;
+        _lblUserName.Text = "Admin";
+
+        _lblUserRole.AutoSize = true;
+        _lblUserRole.Location = new Point(54, 26); // Alt role yazısı
+        _lblUserRole.Font = new Font("Segoe UI", 7.5F, FontStyle.Regular); // 8F -> 7.5F
+        _lblUserRole.BackColor = Color.Transparent;
+        _lblUserRole.Text = "Geliştirici";
+
+        _btnLogout.Size = new Size(26, 26); // Hafif küçültüldü
+        _btnLogout.Location = new Point(168, 13); // Kesinlikle tam görünmesi için sola (X=168) çekildi
+        _btnLogout.Anchor = AnchorStyles.Top | AnchorStyles.Left; // AnchorRight kaldırıldı (esneyip kaybolmasını engeller)
+        _btnLogout.Font = new Font("Segoe UI Semibold", 11.5F, FontStyle.Bold);
+        _btnLogout.ForeColor = Color.FromArgb(239, 68, 68); // Kırmızı Çıkış Ikonu
+        _btnLogout.BackColor = Color.Transparent;
+        _btnLogout.Text = "⏻"; // Elegant kapatma simgesi
+        _btnLogout.TextAlign = ContentAlignment.MiddleCenter;
+        _btnLogout.Cursor = Cursors.Hand;
+
+        _btnLogout.MouseEnter += (s, e) => _btnLogout.ForeColor = Color.FromArgb(248, 113, 113); // hover parlak kırmızı
+        _btnLogout.MouseLeave += (s, e) => _btnLogout.ForeColor = Color.FromArgb(239, 68, 68);
+        _btnLogout.Click += BtnLogout_Click;
+
+        _pnlUserCard.Controls.Add(_pnlUserAvatar);
+        _pnlUserCard.Controls.Add(_lblUserName);
+        _pnlUserCard.Controls.Add(_lblUserRole);
+        _pnlUserCard.Controls.Add(_btnLogout);
+        _pnlUserProfile.Controls.Add(_pnlUserCard);
+
+        // Sidebar bileşen ekleme sırası (Dock kurallarına uygun)
         _pnlSidebar.Controls.Add(_btnDashboard);
         _pnlSidebar.Controls.Add(_btnHistory);
         _pnlSidebar.Controls.Add(_btnSettings);
         _pnlSidebar.Controls.Add(_btnAbout);
+        _pnlSidebar.Controls.Add(_pnlUserProfile);
+        _pnlSidebar.Controls.Add(_pnlSidebarBottom);
         _pnlSidebar.Controls.Add(_lblVersion);
 
-        // Center layout
+        // Center layout (Kod Editörü ve AI Önerileri)
         _tblCenter.Dock = DockStyle.Fill;
         _tblCenter.BackColor = Color.FromArgb(18, 18, 18);
         _tblCenter.Padding = new Padding(20);
@@ -285,8 +418,7 @@ public partial class Form1 : Form
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));  // editor
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Absolute, 1F));  // divider
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));  // AI
-        _tblMain.Controls.Add(_tblCenter, 1, 0);
-
+        _tblMain.Controls.Add(_tblCenter, 1, 0); // Row 0 of _tblMain (Üst)
         _pnlCenterDivider.Dock = DockStyle.Fill;
         _pnlCenterDivider.BackColor = Border333;
 
@@ -376,19 +508,19 @@ public partial class Form1 : Form
         _pnlAiHeader.BorderStyle = BorderStyle.None;
 
         _lblAiHeaderIcon.AutoSize = true;
-        _lblAiHeaderIcon.Location = new Point(14, 16);
+        _lblAiHeaderIcon.Location = new Point(14, 15);
         _lblAiHeaderIcon.Font = new Font("Segoe UI Emoji", 13F);
         _lblAiHeaderIcon.ForeColor = Color.FromArgb(230, 230, 255);
         _lblAiHeaderIcon.Text = "✨";
 
         _lblAiHeaderTitle.AutoSize = true;
-        _lblAiHeaderTitle.Location = new Point(44, 12);
+        _lblAiHeaderTitle.Location = new Point(52, 12);
         _lblAiHeaderTitle.Font = FontTitle;
         _lblAiHeaderTitle.ForeColor = Color.FromArgb(235, 235, 245);
         _lblAiHeaderTitle.Text = "AI Önerileri";
 
         _lblAiHeaderSubtitle.AutoSize = true;
-        _lblAiHeaderSubtitle.Location = new Point(44, 33);
+        _lblAiHeaderSubtitle.Location = new Point(52, 33);
         _lblAiHeaderSubtitle.Font = FontText;
         _lblAiHeaderSubtitle.ForeColor = Color.FromArgb(180, 170, 200);
         _lblAiHeaderSubtitle.Text = "Yapay zeka destekli çözüm önerileri";
@@ -434,15 +566,17 @@ public partial class Form1 : Form
         _tblCenter.Controls.Add(_pnlEditor, 0, 0);
         _tblCenter.Controls.Add(_pnlCenterDivider, 0, 1);
         _tblCenter.Controls.Add(_pnlAi, 0, 2);
-
-        // Right panel (results)
+        // Sağ panel (Analiz Sonuçları)
         _pnlRight.Dock = DockStyle.Fill;
         _pnlRight.BackColor = Color.FromArgb(18, 18, 18);
         _pnlRight.Padding = new Padding(20);
         _pnlRight.BorderStyle = BorderStyle.None;
         _tblMain.Controls.Add(_pnlRight, 2, 0);
 
+        // Analiz Sonuçları kartını sağ panele direkt yerleştir
+
         _pnlResults.Dock = DockStyle.Fill;
+        _pnlRight.Controls.Add(_pnlResults);
         _pnlResults.BackColor = Color.FromArgb(18, 18, 18);
         _pnlResults.BorderRadius = 12;
         _pnlResults.BorderSize = 1;
@@ -497,7 +631,816 @@ public partial class Form1 : Form
         _pnlResults.Controls.Add(_pnlResultsFooter);
         _pnlResults.Controls.Add(_pnlResultsHeader);
 
-        _pnlRight.Controls.Add(_pnlResults);
+        // Dinamik Ek Sayfalar (History, Settings, About) Oluşturulur ve Main Layout'a Eklenir
+        BuildHistoryPanel();
+        BuildSettingsPanel();
+        BuildAboutPanel();
+
+        _tblMain.Controls.Add(_pnlHistory, 1, 0);
+        _tblMain.SetColumnSpan(_pnlHistory, 2);
+        _tblMain.SetRowSpan(_pnlHistory, 2);
+        _pnlHistory.Dock = DockStyle.Fill;
+        _pnlHistory.Visible = false;
+
+        _tblMain.Controls.Add(_pnlSettings, 1, 0);
+        _tblMain.SetColumnSpan(_pnlSettings, 2);
+        _tblMain.SetRowSpan(_pnlSettings, 2);
+        _pnlSettings.Dock = DockStyle.Fill;
+        _pnlSettings.Visible = false;
+
+        _tblMain.Controls.Add(_pnlAbout, 1, 0);
+        _tblMain.SetColumnSpan(_pnlAbout, 2);
+        _tblMain.SetRowSpan(_pnlAbout, 2);
+        _pnlAbout.Dock = DockStyle.Fill;
+        _pnlAbout.Visible = false;
+
+    }
+
+
+
+    /// <summary>
+    /// Geçmiş (History) sekmesi içeriğini dinamik kartlarla oluşturur.
+    /// </summary>
+    private void BuildHistoryPanel()
+    {
+        _pnlHistory.Padding = new Padding(24);
+        _pnlHistory.BackColor = Color.FromArgb(9, 9, 11);
+
+        var lblHeader = new Label
+        {
+            Text = "Analiz Geçmişi",
+            Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(244, 244, 245),
+            Location = new Point(24, 24),
+            AutoSize = true
+        };
+
+        var lblSub = new Label
+        {
+            Text = "Daha önce gerçekleştirilmiş kod taramaları ve güvenlik analizleri.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(24, 60),
+            AutoSize = true
+        };
+
+        var flpItems = new FlowLayoutPanel
+        {
+            Location = new Point(24, 100),
+            Size = new Size(700, 480),
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true,
+            BackColor = Color.Transparent
+        };
+
+        // 3 Tane Premium Analiz Geçmişi Kartı Eklenir
+        flpItems.Controls.Add(CreateHistoryCard("DbConnection.cs", "17.05.2026 10:14", "SqlInjectionAnalyzer", "RİSKLİ (Kritik)", "SqlCommand parametreleri inline string birleştirme ile oluşturulmuş.", true));
+        flpItems.Controls.Add(CreateHistoryCard("GeminiService.cs", "16.05.2026 15:42", "HardcodedSecretAnalyzer", "RİSKLİ (Kritik)", "API Key değişkeninde hardcoded gizli anahtar bulundu.", true));
+        flpItems.Controls.Add(CreateHistoryCard("MathUtils.cs", "15.05.2026 09:20", "MagicNumberAnalyzer", "GÜVENLİ", "Kod analizi tamamlandı. Herhangi bir güvenlik açığı tespit edilmedi.", false));
+
+        _pnlHistory.Controls.Add(lblHeader);
+        _pnlHistory.Controls.Add(lblSub);
+        _pnlHistory.Controls.Add(flpItems);
+    }
+
+    /// <summary>
+    /// Geçmiş analizler için premium bir liste elemanı/kartı üretir.
+    /// </summary>
+    private Control CreateHistoryCard(string fileName, string date, string analyzer, string status, string message, bool isRisk)
+    {
+        var card = new RoundedPanel
+        {
+            Width = 650,
+            Height = 100,
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = isRisk ? Color.FromArgb(220, 53, 69) : Color.FromArgb(40, 167, 69),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Margin = new Padding(0, 0, 0, 16),
+            Padding = new Padding(16, 12, 16, 12),
+            DrawShadow = false
+        };
+
+        card.Paint += (_, e) =>
+        {
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var accent = new SolidBrush(isRisk ? Color.FromArgb(220, 53, 69) : Color.FromArgb(40, 167, 69));
+            e.Graphics.FillRectangle(accent, new Rectangle(0, 10, 4, card.Height - 20));
+        };
+
+        var lblName = new Label
+        {
+            Text = fileName,
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(16, 12),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblDate = new Label
+        {
+            Text = date,
+            Font = new Font("Segoe UI", 8.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(113, 113, 122),
+            Location = new Point(530, 14),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblStatus = new RoundedLabel
+        {
+            Text = status,
+            Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+            BackColor = isRisk ? Color.FromArgb(220, 53, 69) : Color.FromArgb(40, 167, 69),
+            ForeColor = Color.White,
+            Size = new Size(95, 20),
+            Location = new Point(16, 40),
+            TextAlign = ContentAlignment.MiddleCenter,
+            BorderRadius = 8
+        };
+
+        var lblAnalyzer = new Label
+        {
+            Text = $"Tarayıcı: {analyzer}",
+            Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(120, 42),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblMsg = new Label
+        {
+            Text = message,
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(200, 205, 215),
+            Location = new Point(16, 68),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        card.Controls.Add(lblName);
+        card.Controls.Add(lblDate);
+        card.Controls.Add(lblStatus);
+        card.Controls.Add(lblAnalyzer);
+        card.Controls.Add(lblMsg);
+
+        return card;
+    }
+
+    /// <summary>
+    /// Ayarlar (Settings) sekmesini pürüzsüz çalışan tema değiştiricisiyle kurar.
+    /// </summary>
+    private void BuildSettingsPanel()
+    {
+        _pnlSettings.Padding = new Padding(24);
+        _pnlSettings.BackColor = Color.FromArgb(9, 9, 11);
+        _pnlSettings.AutoScroll = true; // İçerik taşarsa premium kaydırma çubuğu aktifleşir
+
+        var lblHeader = new Label
+        {
+            Text = "Ayarlar",
+            Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(244, 244, 245),
+            Location = new Point(24, 24),
+            AutoSize = true
+        };
+
+        var lblSub = new Label
+        {
+            Text = "Platform tercihlerini ve arayüz temalarını yapılandırın.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(24, 60),
+            AutoSize = true
+        };
+
+        // Kart 1: Arayüz Teması (Koyu Tema & Açık Tema Seçim Kartları)
+        var pnlThemeCard = new RoundedPanel
+        {
+            Location = new Point(24, 100),
+            Size = new Size(600, 170), // Yükseklik iki şık kartı barındıracak şekilde 170px'e çıkarıldı
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = Color.FromArgb(45, 45, 48),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Padding = new Padding(20)
+        };
+
+        var lblThemeTitle = new Label
+        {
+            Text = "Arayüz Teması",
+            Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(20, 18),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        // Koyu Tema Kartı (Tıklanabilir Seçim Kutusu)
+        _pnlDarkCard.Location = new Point(20, 52);
+        _pnlDarkCard.Size = new Size(268, 102);
+        _pnlDarkCard.BorderRadius = 12;
+        _pnlDarkCard.Cursor = Cursors.Hand;
+        _pnlDarkCard.BackColor = Color.FromArgb(18, 18, 20);
+
+        var lblDarkTitle = new Label
+        {
+            Text = "Koyu Tema",
+            Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(12, 12),
+            Size = new Size(180, 20),
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand
+        };
+
+        _lblDarkCheck.Text = "✓";
+        _lblDarkCheck.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        _lblDarkCheck.ForeColor = Color.FromArgb(74, 222, 128);
+        _lblDarkCheck.Location = new Point(236, 10);
+        _lblDarkCheck.Size = new Size(24, 24);
+        _lblDarkCheck.BackColor = Color.Transparent;
+        _lblDarkCheck.Cursor = Cursors.Hand;
+
+        var lblDarkDesc = new Label
+        {
+            Text = "Zinc-950 tabanlı derin karanlık kod analiz arayüzü.",
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(12, 38),
+            Size = new Size(244, 50),
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand
+        };
+
+        _pnlDarkCard.Controls.Add(lblDarkTitle);
+        _pnlDarkCard.Controls.Add(_lblDarkCheck);
+        _pnlDarkCard.Controls.Add(lblDarkDesc);
+
+        // Açık Tema Kartı (Tıklanabilir Seçim Kutusu)
+        _pnlLightCard.Location = new Point(312, 52);
+        _pnlLightCard.Size = new Size(268, 102);
+        _pnlLightCard.BorderRadius = 12;
+        _pnlLightCard.Cursor = Cursors.Hand;
+        _pnlLightCard.BackColor = Color.FromArgb(244, 244, 245);
+
+        var lblLightTitle = new Label
+        {
+            Text = "Açık Tema",
+            Font = new Font("Segoe UI Semibold", 10.5F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(24, 24, 27),
+            Location = new Point(12, 12),
+            Size = new Size(180, 20),
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand
+        };
+
+        _lblLightCheck.Text = "";
+        _lblLightCheck.Font = new Font("Segoe UI", 12F, FontStyle.Bold);
+        _lblLightCheck.ForeColor = Color.FromArgb(0, 122, 204);
+        _lblLightCheck.Location = new Point(236, 10);
+        _lblLightCheck.Size = new Size(24, 24);
+        _lblLightCheck.BackColor = Color.Transparent;
+        _lblLightCheck.Cursor = Cursors.Hand;
+
+        var lblLightDesc = new Label
+        {
+            Text = "Zinc-100 tabanlı gözü yormayan yüksek kontrastlı aydınlık tema.",
+            Font = new Font("Segoe UI", 9F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(113, 113, 122),
+            Location = new Point(12, 38),
+            Size = new Size(244, 50),
+            AutoSize = false,
+            BackColor = Color.Transparent,
+            Cursor = Cursors.Hand
+        };
+
+        _pnlLightCard.Controls.Add(lblLightTitle);
+        _pnlLightCard.Controls.Add(_lblLightCheck);
+        _pnlLightCard.Controls.Add(lblLightDesc);
+
+        // Tıklama event'lerinin alt kontrollere ve panellere bağlanması
+        EventHandler setDarkTheme = (s, e) => { _isDarkMode = true; ApplyTheme(); };
+        EventHandler setLightTheme = (s, e) => { _isDarkMode = false; ApplyTheme(); };
+
+        _pnlDarkCard.Click += setDarkTheme;
+        lblDarkTitle.Click += setDarkTheme;
+        _lblDarkCheck.Click += setDarkTheme;
+        lblDarkDesc.Click += setDarkTheme;
+
+        _pnlLightCard.Click += setLightTheme;
+        lblLightTitle.Click += setLightTheme;
+        _lblLightCheck.Click += setLightTheme;
+        lblLightDesc.Click += setLightTheme;
+
+        pnlThemeCard.Controls.Add(lblThemeTitle);
+        pnlThemeCard.Controls.Add(_pnlDarkCard);
+        pnlThemeCard.Controls.Add(_pnlLightCard);
+
+        // Kart 2: Yapay Zeka Altyapı Ayarları (AI Model Configuration)
+        var pnlAiConfigCard = new RoundedPanel
+        {
+            Location = new Point(24, 286), // Spacing adjusted
+            Size = new Size(600, 140),
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = Color.FromArgb(45, 45, 48),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Padding = new Padding(20)
+        };
+
+        var lblAiTitle = new Label
+        {
+            Text = "Varsayılan Yapay Zeka Modeli",
+            Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(20, 20),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblAiDesc = new Label
+        {
+            Text = "Kod analizinde kullanılacak ön tanımlı motoru seçin.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(20, 48),
+            Size = new Size(560, 40),
+            BackColor = Color.Transparent
+        };
+
+        _cmbSettingsAiModel.Size = new Size(300, 36);
+        _cmbSettingsAiModel.Location = new Point(20, 88);
+        _cmbSettingsAiModel.DropDownStyle = ComboBoxStyle.DropDownList;
+        _cmbSettingsAiModel.BackColor = Color.FromArgb(45, 45, 48);
+        _cmbSettingsAiModel.ForeColor = Color.White;
+        _cmbSettingsAiModel.Font = FontTextBold;
+        _cmbSettingsAiModel.FlatStyle = FlatStyle.Flat;
+        _cmbSettingsAiModel.Items.AddRange(new object[] { 
+            "Gemini 1.5 Pro (Derin Analiz)", 
+            "Groq Llama 3 (Süper Hızlı)", 
+            "OpenRouter (Alternatif)" 
+        });
+        _cmbSettingsAiModel.SelectedIndex = 1; // Varsayılan Groq Llama 3
+        _cmbSettingsAiModel.Cursor = Cursors.Hand;
+
+        pnlAiConfigCard.Controls.Add(lblAiTitle);
+        pnlAiConfigCard.Controls.Add(lblAiDesc);
+        pnlAiConfigCard.Controls.Add(_cmbSettingsAiModel);
+
+        // Kart 3: Tarama ve Analiz Tercihleri (Analyzer Settings)
+        var pnlAnalyzerConfigCard = new RoundedPanel
+        {
+            Location = new Point(24, 442), // Spacing adjusted
+            Size = new Size(600, 140),
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = Color.FromArgb(45, 45, 48),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Padding = new Padding(20)
+        };
+
+        var lblAnalyzerTitle = new Label
+        {
+            Text = "Güvenlik Analizörleri",
+            Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(20, 20),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblAnalyzerDesc = new Label
+        {
+            Text = "Hangi güvenlik açıklarının taranacağını özelleştirin.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(20, 48),
+            Size = new Size(560, 30),
+            BackColor = Color.Transparent
+        };
+
+        ConfigureSettingsCheckbox(_chkSqlInjection, "SQL Injection Taraması (Roslyn)", new Point(20, 78), 240);
+        ConfigureSettingsCheckbox(_chkHardcodedSecrets, "Hardcoded Secret / Şifre Taraması (Roslyn)", new Point(270, 78), 300);
+        ConfigureSettingsCheckbox(_chkAutoStart, "Dosya yüklenir yüklenmez otomatik analizi başlat.", new Point(20, 106), 450);
+
+        _chkSqlInjection.Checked = true;
+        _chkHardcodedSecrets.Checked = true;
+        _chkAutoStart.Checked = false;
+
+        pnlAnalyzerConfigCard.Controls.Add(lblAnalyzerTitle);
+        pnlAnalyzerConfigCard.Controls.Add(lblAnalyzerDesc);
+        pnlAnalyzerConfigCard.Controls.Add(_chkSqlInjection);
+        pnlAnalyzerConfigCard.Controls.Add(_chkHardcodedSecrets);
+        pnlAnalyzerConfigCard.Controls.Add(_chkAutoStart);
+
+        // Kart 4: Geliştirici ve API Anahtarları (API Key Management)
+        var pnlApiKeyCard = new RoundedPanel
+        {
+            Location = new Point(24, 598), // Spacing adjusted
+            Size = new Size(600, 150),
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = Color.FromArgb(45, 45, 48),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Padding = new Padding(20)
+        };
+
+        var lblApiKeyTitle = new Label
+        {
+            Text = "API Anahtarları Kontrolü",
+            Font = new Font("Segoe UI Semibold", 12F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(20, 20),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblApiKeyDesc = new Label
+        {
+            Text = "Yapay zeka servisleri için yerel API key durumları.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(20, 48),
+            Size = new Size(560, 30),
+            BackColor = Color.Transparent
+        };
+
+        _lblGeminiApiStatus.Text = "Gemini API: ● Aktif / Bağlı";
+        _lblGeminiApiStatus.Location = new Point(20, 80);
+        _lblGeminiApiStatus.Size = new Size(200, 24);
+        _lblGeminiApiStatus.Font = FontTextBold;
+        _lblGeminiApiStatus.ForeColor = Color.FromArgb(74, 222, 128); // Premium yeşil (#4ade80)
+        _lblGeminiApiStatus.BackColor = Color.Transparent;
+
+        _lblGroqApiStatus.Text = "Groq API: ● Aktif / Bağlı";
+        _lblGroqApiStatus.Location = new Point(240, 80);
+        _lblGroqApiStatus.Size = new Size(200, 24);
+        _lblGroqApiStatus.Font = FontTextBold;
+        _lblGroqApiStatus.ForeColor = Color.FromArgb(74, 222, 128);
+        _lblGroqApiStatus.BackColor = Color.Transparent;
+
+        _btnEditApiKeys.Text = "API Anahtarlarını Düzenle (.json)";
+        _btnEditApiKeys.Font = new Font("Segoe UI Semibold", 9F, FontStyle.Bold);
+        _btnEditApiKeys.BackColor = Color.FromArgb(39, 39, 42); // Zinc-800
+        _btnEditApiKeys.ForeColor = Color.FromArgb(161, 161, 170); // Zinc-400
+        _btnEditApiKeys.Size = new Size(240, 30);
+        _btnEditApiKeys.Location = new Point(20, 110);
+        _btnEditApiKeys.BorderRadius = 6;
+        _btnEditApiKeys.BorderSize = 1;
+        _btnEditApiKeys.BorderColor = Color.FromArgb(63, 63, 70); // Zinc-700
+        _btnEditApiKeys.Cursor = Cursors.Hand;
+
+        _btnEditApiKeys.MouseEnter += (_, _) => {
+            _btnEditApiKeys.BackColor = Color.FromArgb(45, 45, 48);
+            _btnEditApiKeys.ForeColor = Color.White;
+        };
+        _btnEditApiKeys.MouseLeave += (_, _) => {
+            _btnEditApiKeys.BackColor = Color.FromArgb(39, 39, 42);
+            _btnEditApiKeys.ForeColor = Color.FromArgb(161, 161, 170);
+        };
+
+        pnlApiKeyCard.Controls.Add(lblApiKeyTitle);
+        pnlApiKeyCard.Controls.Add(lblApiKeyDesc);
+        pnlApiKeyCard.Controls.Add(_lblGeminiApiStatus);
+        pnlApiKeyCard.Controls.Add(_lblGroqApiStatus);
+        pnlApiKeyCard.Controls.Add(_btnEditApiKeys);
+
+        // Panelleri Settings sayfasına ekle
+        _pnlSettings.Controls.Add(lblHeader);
+        _pnlSettings.Controls.Add(lblSub);
+        _pnlSettings.Controls.Add(pnlThemeCard);
+        _pnlSettings.Controls.Add(pnlAiConfigCard);
+        _pnlSettings.Controls.Add(pnlAnalyzerConfigCard);
+        _pnlSettings.Controls.Add(pnlApiKeyCard);
+    }
+
+    private static void ConfigureSettingsCheckbox(CheckBox chk, string text, Point location, int width)
+    {
+        chk.Text = text;
+        chk.Location = location;
+        chk.Size = new Size(width, 24);
+        chk.FlatStyle = FlatStyle.Flat;
+        chk.Font = FontText;
+        chk.ForeColor = Color.FromArgb(244, 244, 245);
+        chk.BackColor = Color.Transparent;
+        chk.Cursor = Cursors.Hand;
+    }
+
+    private void btnThemeToggle_Click(object? sender, EventArgs e)
+    {
+        _isDarkMode = !_isDarkMode;
+        ApplyTheme();
+    }
+
+    private void BtnLogout_Click(object? sender, EventArgs e)
+    {
+        var result = MessageBox.Show("Çıkış yapmak istediğinize emin misiniz?", "Oturumu Kapat", MessageBoxButtons.YesNo, MessageBoxIcon.Question);
+        if (result == DialogResult.Yes)
+        {
+            IsLoggingOut = true;
+            this.Close();
+
+            var loginForm = System.Windows.Forms.Application.OpenForms["LoginForm"] as LoginForm;
+            if (loginForm != null)
+            {
+                loginForm.ResetFormForLogout();
+            }
+        }
+    }
+
+    /// <summary>
+    /// Hakkında (About) sekmesini ekibin vizyonuyla minimalist tasarlar.
+    /// </summary>
+    private void BuildAboutPanel()
+    {
+        _pnlAbout.Padding = new Padding(24);
+        _pnlAbout.BackColor = Color.FromArgb(9, 9, 11);
+
+        var lblHeader = new Label
+        {
+            Text = "Hakkında",
+            Font = new Font("Segoe UI", 16F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(244, 244, 245),
+            Location = new Point(24, 24),
+            AutoSize = true
+        };
+
+        var lblSub = new Label
+        {
+            Text = "DeepCode Analytics platformu ve ekibimiz hakkında.",
+            Font = new Font("Segoe UI", 9.5F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(161, 161, 170),
+            Location = new Point(24, 60),
+            AutoSize = true
+        };
+
+        var pnlAboutCard = new RoundedPanel
+        {
+            Location = new Point(24, 100),
+            Size = new Size(600, 300),
+            BorderRadius = 12,
+            BorderSize = 1,
+            BorderColor = Color.FromArgb(45, 45, 48),
+            BackColor = Color.FromArgb(24, 24, 27),
+            Padding = new Padding(24)
+        };
+
+        var lblAboutTitle = new Label
+        {
+            Text = "DeepCode Analytics v1.0.0",
+            Font = new Font("Segoe UI", 14F, FontStyle.Bold),
+            ForeColor = Color.White,
+            Location = new Point(24, 24),
+            AutoSize = true,
+            BackColor = Color.Transparent
+        };
+
+        var lblAboutDesc = new Label
+        {
+            Text = "DeepCode Analytics; projenizdeki kod kalitesini artırmak ve güvenlik açıklarını tespit etmek üzere Roslyn kod analizörleri ile RAG (Retrieval-Augmented Generation) tabanlı yapay zeka modelini birleştiren modern bir hibrit analiz platformudur.\n\n" +
+                   "Ekip Üyeleri & Rol Dağılımı:\n" +
+                   "• Deniz — Yapay Zeka RAG Entegrasyonu & Roslyn Kod Analizörleri\n" +
+                   "• Yarengul — Tasarım Sistemi (Design System) & Arayüz Mimarisi\n\n" +
+                   "Tüm hakları saklıdır. © 2026 DeepCode Analytics.",
+            Font = new Font("Segoe UI", 10F, FontStyle.Regular),
+            ForeColor = Color.FromArgb(200, 205, 215),
+            Location = new Point(24, 60),
+            Size = new Size(550, 220),
+            BackColor = Color.Transparent,
+            AutoSize = false
+        };
+
+        pnlAboutCard.Controls.Add(lblAboutTitle);
+        pnlAboutCard.Controls.Add(lblAboutDesc);
+
+        _pnlAbout.Controls.Add(lblHeader);
+        _pnlAbout.Controls.Add(lblSub);
+        _pnlAbout.Controls.Add(pnlAboutCard);
+    }
+
+    /// <summary>
+    /// Arayüzü Light Mode / Dark Mode arasında akıcı bir şekilde günceller.
+    /// </summary>
+    private void ApplyTheme()
+    {
+        Color formBg = _isDarkMode ? Color.FromArgb(9, 9, 11) : Color.FromArgb(244, 244, 245);
+        Color headerBg = _isDarkMode ? Color.FromArgb(11, 14, 20) : Color.FromArgb(244, 244, 245);
+        Color cardBg = _isDarkMode ? Color.FromArgb(24, 24, 27) : Color.White;
+        Color borderCol = _isDarkMode ? Color.FromArgb(51, 51, 51) : Color.FromArgb(228, 228, 231);
+        Color textPrimary = _isDarkMode ? Color.FromArgb(244, 244, 245) : Color.FromArgb(24, 24, 27);
+        Color textSecondary = _isDarkMode ? Color.FromArgb(161, 161, 170) : Color.FromArgb(113, 113, 122);
+        Color sidebarBg = _isDarkMode ? Color.FromArgb(11, 14, 20) : Color.FromArgb(244, 244, 245);
+
+        // Form ve temel düzen
+        this.BackColor = formBg;
+        _tblRoot.BackColor = formBg;
+        _tblMain.BackColor = formBg;
+        _tblCenter.BackColor = formBg;
+        _pnlRight.BackColor = formBg;
+        _pnlTopHeader.BackColor = headerBg;
+        _pnlSidebar.BackColor = sidebarBg;
+        _lblVersion.BackColor = sidebarBg;
+
+        // Üst panel logoları
+        _lblLogo.ForeColor = textPrimary;
+        _lblSubtitle.ForeColor = textSecondary;
+
+        // ComboBox & Düğmeler
+        _cmbAiProvider.BackColor = _isDarkMode ? Color.FromArgb(45, 45, 48) : Color.White;
+        _cmbAiProvider.ForeColor = textPrimary;
+        _btnDosyaYukle.BackColor = _isDarkMode ? Color.FromArgb(45, 45, 48) : Color.FromArgb(228, 228, 231);
+        _btnDosyaYukle.ForeColor = textPrimary;
+
+        // Durum Işığı (Status Dot) Premium Tema Uyumu
+        if (_isDarkMode)
+        {
+            _lblStatusDot.BackColor = Color.FromArgb(30, 60, 30);
+            _lblStatusDot.ForeColor = Color.FromArgb(60, 179, 113);
+        }
+        else
+        {
+            _lblStatusDot.BackColor = Color.FromArgb(220, 252, 231);
+            _lblStatusDot.ForeColor = Color.FromArgb(21, 128, 61);
+        }
+
+        // Editör Kartı
+        _pnlEditor.BackColor = cardBg;
+        _pnlEditor.BorderColor = borderCol;
+        _pnlEditorBody.BackColor = cardBg;
+        _pnlEditorHeader.BackColor = _isDarkMode ? Color.FromArgb(16, 20, 28) : Color.FromArgb(244, 244, 245);
+        _pnlEditorFooter.BackColor = _isDarkMode ? Color.FromArgb(16, 20, 28) : Color.FromArgb(244, 244, 245);
+        _lblEditorTitle.ForeColor = textPrimary;
+        _txtKodAlani.BackColor = cardBg;
+        _txtKodAlani.ForeColor = _isDarkMode ? Color.FromArgb(212, 212, 212) : Color.FromArgb(24, 24, 27);
+        _pnlLineNumbers.BackColor = _isDarkMode ? Color.FromArgb(14, 17, 24) : Color.FromArgb(228, 228, 231);
+
+        // Editör alt hap etiketleri (UTF-8, Lines)
+        _lblEditorUtf8.BackColor = _isDarkMode ? Color.FromArgb(22, 27, 38) : Color.FromArgb(244, 244, 245);
+        _lblEditorUtf8.ForeColor = textSecondary;
+        _lblEditorLines.BackColor = _isDarkMode ? Color.FromArgb(22, 27, 38) : Color.FromArgb(244, 244, 245);
+        _lblEditorLines.ForeColor = textSecondary;
+
+        // AI Kartı
+        _pnlAi.BackColor = cardBg;
+        _pnlAi.BorderColor = borderCol;
+        _pnlAiHeader.BackColor = cardBg;
+        _pnlAiBody.BackColor = cardBg;
+        _tblAiColumns.BackColor = cardBg;
+        _lblAiHeaderTitle.ForeColor = textPrimary;
+        _lblAiHeaderSubtitle.ForeColor = textSecondary;
+        
+        _pnlAiColProblem.BackColor = cardBg;
+        _pnlAiColDesc.BackColor = cardBg;
+        _pnlAiColSolution.BackColor = cardBg;
+        _flpAiProblem.BackColor = cardBg;
+        _flpAiDesc.BackColor = cardBg;
+        _flpAiSolution.BackColor = cardBg;
+
+        // İnceleme Sonuçları Kartı
+        _pnlResults.BackColor = cardBg;
+        _pnlResults.BorderColor = borderCol;
+        _pnlResultsHeader.BackColor = headerBg;
+        _pnlResultsFooter.BackColor = headerBg;
+        _flpIssues.BackColor = cardBg;
+        _lblResultsTitle.ForeColor = textPrimary;
+        _lblHigh.ForeColor = textPrimary;
+        _lblMedium.ForeColor = textPrimary;
+        _lblLow.ForeColor = textPrimary;
+
+        // Ek sayfaların alt elemanlarını ve dinamik listeleri rekürsif olarak güncelle
+        UpdateThemeRecursive(_pnlHistory, formBg, cardBg, textPrimary, textSecondary, borderCol);
+        UpdateThemeRecursive(_pnlSettings, formBg, cardBg, textPrimary, textSecondary, borderCol);
+        UpdateThemeRecursive(_pnlAbout, formBg, cardBg, textPrimary, textSecondary, borderCol);
+        UpdateThemeRecursive(_flpIssues, formBg, cardBg, textPrimary, textSecondary, borderCol);
+        UpdateThemeRecursive(_pnlAiBody, formBg, cardBg, textPrimary, textSecondary, borderCol);
+
+        // Ayarlar Tema Seçim Kartlarının Görünüm Güncellemesi
+        if (_isDarkMode)
+        {
+            _pnlDarkCard.BackColor = Color.FromArgb(18, 18, 20);
+            _pnlDarkCard.BorderColor = Color.FromArgb(0, 122, 204);
+            _pnlDarkCard.BorderSize = 2;
+            _lblDarkCheck.Text = "✓";
+            _lblDarkCheck.ForeColor = Color.FromArgb(74, 222, 128);
+
+            _pnlLightCard.BackColor = Color.FromArgb(24, 24, 27);
+            _pnlLightCard.BorderColor = borderCol;
+            _pnlLightCard.BorderSize = 1;
+            _lblLightCheck.Text = "";
+        }
+        else
+        {
+            _pnlLightCard.BackColor = Color.White;
+            _pnlLightCard.BorderColor = Color.FromArgb(0, 122, 204);
+            _pnlLightCard.BorderSize = 2;
+            _lblLightCheck.Text = "✓";
+            _lblLightCheck.ForeColor = Color.FromArgb(0, 122, 204);
+
+            _pnlDarkCard.BackColor = Color.FromArgb(228, 228, 231);
+            _pnlDarkCard.BorderColor = borderCol;
+            _pnlDarkCard.BorderSize = 1;
+            _lblDarkCheck.Text = "";
+        }
+
+        // Seçim kartlarının altındaki metinlerin renk güncellemesi
+        foreach (Control ctrl in _pnlDarkCard.Controls)
+        {
+            if (ctrl is Label l && l != _lblDarkCheck)
+            {
+                l.ForeColor = (l.Font.Bold || l.Font.Size >= 11) ? textPrimary : textSecondary;
+            }
+        }
+        foreach (Control ctrl in _pnlLightCard.Controls)
+        {
+            if (ctrl is Label l && l != _lblLightCheck)
+            {
+                l.ForeColor = (l.Font.Bold || l.Font.Size >= 11) ? textPrimary : textSecondary;
+            }
+        }
+
+        // Ayarlar Model Seçim Kutusu
+        _cmbSettingsAiModel.BackColor = _isDarkMode ? Color.FromArgb(45, 45, 48) : Color.White;
+        _cmbSettingsAiModel.ForeColor = textPrimary;
+
+        // API Anahtarı Düzenleme Butonu
+        _btnEditApiKeys.BackColor = _isDarkMode ? Color.FromArgb(39, 39, 42) : Color.FromArgb(228, 228, 231);
+        _btnEditApiKeys.ForeColor = _isDarkMode ? Color.FromArgb(161, 161, 170) : Color.FromArgb(82, 82, 91);
+        _btnEditApiKeys.BorderColor = _isDarkMode ? Color.FromArgb(63, 63, 70) : Color.FromArgb(200, 200, 210);
+
+        // Sidebar Alt Tema Elemanlarının Güncellenmesi
+        _lblSidebarTheme.Text = _isDarkMode ? "Koyu Tema" : "Açık Tema";
+        _lblSidebarTheme.ForeColor = textSecondary;
+        _lblVersion.ForeColor = _isDarkMode ? Color.FromArgb(60, 65, 75) : Color.FromArgb(120, 120, 130);
+        _btnSidebarThemeToggle.Invalidate();
+
+        // Kullanıcı Giriş / Profil Kartı Tema Güncellemesi
+        _pnlUserProfile.BackColor = sidebarBg;
+        _pnlUserCard.BackColor = _isDarkMode ? Color.FromArgb(20, 20, 24) : Color.White;
+        _pnlUserCard.BorderColor = _isDarkMode ? Color.FromArgb(45, 45, 48) : Color.FromArgb(228, 228, 231);
+        _lblUserName.ForeColor = textPrimary;
+        _lblUserRole.ForeColor = textSecondary;
+        _pnlUserAvatar.Invalidate();
+        _pnlUserCard.Invalidate();
+
+        // Sidebar butonlarını yeniden boyamaya zorla
+        _btnDashboard.Invalidate();
+        _btnHistory.Invalidate();
+        _btnSettings.Invalidate();
+        _btnAbout.Invalidate();
+
+        this.Invalidate(true);
+    }
+
+    /// <summary>
+    /// Ek sayfaların içerisindeki bileşenlerin renklerini rekürsif günceller.
+    /// </summary>
+    private void UpdateThemeRecursive(Control c, Color bg, Color cardBg, Color primaryText, Color secText, Color border)
+    {
+        if (c is Panel p && p != _pnlHistory && p != _pnlSettings && p != _pnlAbout && p != _pnlSidebarBottom)
+        {
+            if (p is RoundedPanel rp)
+            {
+                if (rp != _pnlDarkCard && rp != _pnlLightCard)
+                {
+                    rp.BackColor = cardBg;
+                    rp.BorderColor = border;
+                }
+            }
+            else
+            {
+                p.BackColor = cardBg;
+            }
+        }
+        else if (c is Label l && l is not RoundedLabel)
+        {
+            if (l != _lblGeminiApiStatus && l != _lblGroqApiStatus && 
+                l != _lblDarkCheck && l != _lblLightCheck &&
+                l.ForeColor != Color.FromArgb(220, 53, 69) && 
+                l.ForeColor != Color.FromArgb(40, 167, 69) && 
+                l.ForeColor != Color.FromArgb(74, 222, 128))
+            {
+                l.ForeColor = (l.Font.Bold || l.Font.Size >= 11) ? primaryText : secText;
+            }
+        }
+        else if (c is Button b && b is not RoundedButton)
+        {
+            b.BackColor = cardBg;
+            b.ForeColor = primaryText;
+        }
+        else if (c is CheckBox cb)
+        {
+            cb.ForeColor = primaryText;
+        }
+
+        foreach (Control child in c.Controls)
+        {
+            UpdateThemeRecursive(child, bg, cardBg, primaryText, secText, border);
+        }
     }
 
     private static void ConfigureEditorPill(Label lbl, string text)
@@ -552,8 +1495,6 @@ public partial class Form1 : Form
     /// </summary>
     private void WireUi()
     {
-        // requested: AI header gradient removed (flat background)
-
         _btnDosyaYukle.Click += btnDosyaYukle_Click;
         _btnAnalizEt.Click += btnAnalizEt_Click;
 
@@ -680,9 +1621,23 @@ public partial class Form1 : Form
             RenderIssues(result.Issues);
             RenderAiSuggestions(result.Suggestions.FirstOrDefault()?.SuggestionText);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            MessageBox.Show($"Analiz hatası: {ex.Message}", "Hata", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            // Olası HTTP 401, KeyNotFound veya diğer backend hatalarında arayüzün çökmesini engeller.
+            // Hata metni boşluksuz ham JSON (örn. 401 invalid key) geldiğinde WinForms Label wrap yapamadığı için UI bozuluyordu (Panel dışına taşıyordu).
+            // Kullanıcının istediği temiz, şık ve Türkçe mesajı göstererek bu sorunu çözüyoruz.
+            ClearAiGrid();
+            
+            // "Analiz Sonuçları" rozetini hata moduna al
+            _lblIssuesBadge.Text = "Hata";
+            _lblIssuesBadge.BackColor = Color.FromArgb(220, 53, 69); // Kırmızı
+            
+            // AI Önerileri paneline kırmızı tonlarında şık bir hata bildirimi ekle
+            AddAiRow(
+                "BAĞLANTI HATASI", 
+                "Hata: API Anahtarı Geçersiz veya Bağlantı Sağlanamadı.", 
+                "Lütfen Ayarlar sayfasından API Key bilginizi kontrol edin."
+            );
         }
         finally
         {
@@ -956,7 +1911,6 @@ public partial class Form1 : Form
 
     /// <summary>
     /// Tek bir AI kartı oluşturur. Metin taşmasını önlemek için yüksekliği içeriğe göre ayarlanır.
-    /// Ayrıca alt glow çizgisi ve hover animasyonu ekler.
     /// </summary>
     private RoundedPanel CreateAiCell(string header, string content, Color accentColor)
     {
@@ -989,7 +1943,6 @@ public partial class Form1 : Form
             AutoSize = false,
             Text = content,
             ForeColor = Color.FromArgb(220, 225, 235),
-            // İstek: AI kart metinleri Segoe UI 9.5 ve word-wrap.
             Font = FontText,
             BackColor = Color.Transparent,
             Location = new Point(0, 24),
@@ -999,7 +1952,7 @@ public partial class Form1 : Form
         panel.Controls.Add(lblHeader);
         panel.Controls.Add(lblContent);
 
-        // Alt glow çizgisi (2px) - karta göre renkli ve yarı saydam
+        // Alt glow çizgisi (2px)
         panel.Paint += (_, e) =>
         {
             e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
@@ -1009,7 +1962,7 @@ public partial class Form1 : Form
             e.Graphics.DrawLine(pen, 0, y, panel.Width, y);
         };
 
-        // Hover büyüme (yumuşak) - padding 2px azalır, border belirginleşir
+        // Hover büyüme (yumuşak)
         var basePadding = panel.Padding;
         var hoverPadding = new Padding(
             Math.Max(0, basePadding.Left - 2),
@@ -1027,14 +1980,10 @@ public partial class Form1 : Form
             c.MouseLeave += (_, _) => anim.AnimateToBase();
         }
 
-        // İlk yerleşim: genişlik set edilince yükseklik otomatik hesaplanacak
         panel.SizeChanged += (_, _) => RelayoutAiCard(panel, lblHeader, lblContent);
         return panel;
     }
 
-    /// <summary>
-    /// AI kartı genişliğine göre içerik yüksekliğini hesaplar; metin kesilmesini engeller.
-    /// </summary>
     private static void RelayoutAiCard(RoundedPanel panel, Label lblHeader, Label lblContent)
     {
         int innerW = Math.Max(80, panel.Width - panel.Padding.Left - panel.Padding.Right);
@@ -1046,7 +1995,6 @@ public partial class Form1 : Form
         lblContent.Location = new Point(panel.Padding.Left, contentY);
         lblContent.Width = innerW;
 
-        // Word-wrap ölçümü (TextRenderer ile WordBreak)
         var flags = TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl;
         var measured = TextRenderer.MeasureText(lblContent.Text ?? string.Empty, lblContent.Font, new Size(innerW, int.MaxValue), flags);
         lblContent.Height = Math.Max(18, measured.Height);
@@ -1055,9 +2003,6 @@ public partial class Form1 : Form
         panel.Invalidate();
     }
 
-    /// <summary>
-    /// Hover animasyonu için küçük state nesnesi (Timer ile yumuşak geçiş).
-    /// </summary>
     private sealed class HoverAnimState
     {
         private readonly RoundedPanel _panel;
@@ -1089,7 +2034,6 @@ public partial class Form1 : Form
 
         private void Tick()
         {
-            // 0..8 arası adım
             _t += _toHover ? 1 : -1;
             if (_t <= 0) { _t = 0; _timer.Stop(); }
             if (_t >= 8) { _t = 8; _timer.Stop(); }
@@ -1108,9 +2052,6 @@ public partial class Form1 : Form
                 (int)Math.Round(a.Bottom + (b.Bottom - a.Bottom) * k));
     }
 
-    /// <summary>
-    /// AI kolon panelini; üstte renkli başlık + altta scroll edilebilir içerik olacak şekilde kurar.
-    /// </summary>
     private static void ConfigureAiColumnPanel(Panel colPanel, Panel headerPanel, FlowLayoutPanel flp, string headerText, Color headerColor)
     {
         colPanel.Dock = DockStyle.Fill;
@@ -1120,7 +2061,6 @@ public partial class Form1 : Form
 
         headerPanel.Dock = DockStyle.Top;
         headerPanel.Height = 28;
-        // Başlık arka planı: kolon rengiyle uyumlu, alpha 40
         headerPanel.BackColor = Color.FromArgb(40, headerColor);
         headerPanel.BorderStyle = BorderStyle.None;
 
@@ -1213,6 +2153,9 @@ public partial class Form1 : Form
         btn.Invalidate();
     }
 
+    /// <summary>
+    /// Sidebar buton tıklama olayı. Dinamik sayfa geçişlerini tetikler.
+    /// </summary>
     private void SidebarButton_Click(object? sender, EventArgs e)
     {
         if (sender is not Button btn) return;
@@ -1227,6 +2170,14 @@ public partial class Form1 : Form
 
         previous?.Invalidate();
         btn.Invalidate();
+        // Dinamik Sayfa Geçiş Mantığı
+        bool isDashboard = btn == _btnDashboard;
+        _tblCenter.Visible = isDashboard;
+        _pnlRight.Visible = isDashboard;
+
+        _pnlHistory.Visible = btn == _btnHistory;
+        _pnlSettings.Visible = btn == _btnSettings;
+        _pnlAbout.Visible = btn == _btnAbout;
     }
 
     private void SidebarFadeTimer_Tick(object? sender, EventArgs e)
@@ -1246,7 +2197,12 @@ public partial class Form1 : Form
 
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
         e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-        e.Graphics.Clear(SidebarBg);
+        
+        Color sidebarCurrentBg = _isDarkMode ? SidebarBg : Color.FromArgb(244, 244, 245); // Açık temada Zinc-100 (#f4f4f5)
+        Color hoverCurrentTint = _isDarkMode ? HoverTint : Color.FromArgb(228, 228, 231); // Açık temada Zinc-200 (#e4e4e7)
+        Color inactiveCurrentText = _isDarkMode ? InactiveText : Color.FromArgb(24, 24, 27); // Açık temada koyu metin (#18181b)
+        
+        e.Graphics.Clear(sidebarCurrentBg);
 
         bool isActive = btn == _activeSidebarButton;
         bool isHovered = btn == _hoverSidebarButton;
@@ -1279,15 +2235,15 @@ public partial class Form1 : Form
         if (isHovered)
         {
             using (GraphicsPath hoverPath = GetRoundedPath(innerRect, 10))
-            using (var hoverBrush = new SolidBrush(HoverTint))
+            using (var hoverBrush = new SolidBrush(hoverCurrentTint))
             {
                 e.Graphics.FillPath(hoverBrush, hoverPath);
             }
-            DrawSidebarText(e.Graphics, btn, Color.FromArgb(210, 215, 225));
+            DrawSidebarText(e.Graphics, btn, _isDarkMode ? Color.FromArgb(210, 215, 225) : Color.FromArgb(24, 24, 27));
             return;
         }
 
-        DrawSidebarText(e.Graphics, btn, InactiveText);
+        DrawSidebarText(e.Graphics, btn, inactiveCurrentText);
     }
 
     private static void DrawSidebarText(Graphics g, Button btn, Color textColor)
@@ -1339,7 +2295,12 @@ public partial class Form1 : Form
     private void PnlLineNumbers_Paint(object? sender, PaintEventArgs e)
     {
         e.Graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-        e.Graphics.Clear(Color.FromArgb(14, 17, 24));
+        
+        Color numbersBg = _isDarkMode ? Color.FromArgb(14, 17, 24) : Color.FromArgb(228, 228, 231);
+        Color numbersFg = _isDarkMode ? Color.FromArgb(70, 78, 95) : Color.FromArgb(120, 130, 145);
+        Color sepColor = _isDarkMode ? Color.FromArgb(30, 35, 48) : Color.FromArgb(200, 200, 210);
+        
+        e.Graphics.Clear(numbersBg);
 
         int firstVisibleLine = SendMessage(_txtKodAlani.Handle, EM_GETFIRSTVISIBLELINE, 0, 0);
         int totalLines = Math.Max(1, _txtKodAlani.Lines.Length);
@@ -1359,12 +2320,12 @@ public partial class Form1 : Form
                 lineNum.ToString(),
                 gutterFont,
                 new Rectangle(0, (int)y, _pnlLineNumbers.Width - 10, (int)lineHeight),
-                Color.FromArgb(70, 78, 95),
+                numbersFg,
                 TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.NoPadding);
         }
 
-        using var sepPen = new Pen(Color.FromArgb(30, 35, 48), 1);
-        e.Graphics.DrawLine(sepPen, _pnlLineNumbers.Width - 1, 0, _pnlLineNumbers.Width - 1, _pnlLineNumbers.Height);
+        using var gutterPen = new Pen(sepColor, 1);
+        e.Graphics.DrawLine(gutterPen, _pnlLineNumbers.Width - 1, 0, _pnlLineNumbers.Width - 1, _pnlLineNumbers.Height);
     }
 
     private void TxtKodAlani_TextChanged(object? sender, EventArgs e)
@@ -1395,4 +2356,3 @@ public partial class Form1 : Form
         Apply(root);
     }
 }
-

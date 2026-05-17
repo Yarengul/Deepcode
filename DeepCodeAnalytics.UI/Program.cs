@@ -17,37 +17,48 @@ internal static class Program
     /// </summary>
     private static void Main()
     {
-        var configuration = new ConfigurationBuilder()
-            .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-            .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
-            .Build();
-
-        // --- Sprint 4: Analyzer Test Kodu Başlangıcı ---
-        // Uygulama her açıldığında uzun sürmemesi için yorum satırına alındı.
-        // var runner = new AnalyzerTestRunner();
-        // runner.RunTestsAndGenerateReportAsync().GetAwaiter().GetResult();
-        // --- Sprint 4: Analyzer Test Kodu Bitişi ---
-
-        var analyzers = new List<ICodeAnalyzer>
+        try
         {
-            new MagicNumberAnalyzer(),
-            new EmptyCatchAnalyzer(),
-            new LongMethodAnalyzer(),
-            new NamingConventionAnalyzer(),
-            new SqlInjectionAnalyzer(),       // SQL Injection tespiti
-            new HardcodedSecretAnalyzer()     // Hardcoded şifre/bağlantı tespiti
-        };
+            var configuration = new ConfigurationBuilder()
+                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
+                .AddJsonFile("appsettings.json", optional: false, reloadOnChange: true)
+                .Build();
 
-        var analyzeService = new AnalyzeService(analyzers);
-        var aiFactory = new AiProviderFactory(new HttpClient(), configuration);
-        
-        // RAG Servisleri — TF-IDF: API gerekmez, tfidf_vocab.json'dan yüklenir
-        var embeddingService = new TfIdfEmbeddingService(configuration);
-        var vectorStore = new LocalVectorStore(embeddingService);
-        
-        var analizYoneticisi = new AnalizYoneticisi(analyzeService, aiFactory, embeddingService, vectorStore);
+            // --- Sprint 4: Analyzer Test Kodu Başlangıcı ---
+            // Uygulama her açıldığında uzun sürmemesi için yorum satırına alındı.
+            // var runner = new AnalyzerTestRunner();
+            // runner.RunTestsAndGenerateReportAsync().GetAwaiter().GetResult();
+            // --- Sprint 4: Analyzer Test Kodu Bitişi ---
 
-        ApplicationConfiguration.Initialize();
-        System.Windows.Forms.Application.Run(new Form1(analizYoneticisi));
+            var analyzers = new List<ICodeAnalyzer>
+            {
+                new MagicNumberAnalyzer(),
+                new EmptyCatchAnalyzer(),
+                new LongMethodAnalyzer(),
+                new NamingConventionAnalyzer(),
+                new SqlInjectionAnalyzer(),       // SQL Injection tespiti
+                new HardcodedSecretAnalyzer()     // Hardcoded şifre/bağlantı tespiti
+            };
+
+            var analyzeService = new AnalyzeService(analyzers);
+            var aiFactory = new AiProviderFactory(new HttpClient(), configuration);
+            
+            // RAG Servisleri — TF-IDF: API gerekmez, tfidf_vocab.json'dan yüklenir
+            var embeddingService = new TfIdfEmbeddingService(configuration);
+            var vectorStore = new LocalVectorStore(embeddingService);
+            
+            var analizYoneticisi = new AnalizYoneticisi(analyzeService, aiFactory, embeddingService, vectorStore);
+
+            ApplicationConfiguration.Initialize();
+            System.Windows.Forms.Application.Run(new LoginForm(analizYoneticisi));
+        }
+        catch (System.Exception ex)
+        {
+            System.Windows.Forms.MessageBox.Show(
+                $"Uygulama başlatılırken kritik bir hata oluştu:\n\n{ex.Message}\n\nDetaylar:\n{ex.StackTrace}",
+                "Kritik Başlatma Hatası",
+                System.Windows.Forms.MessageBoxButtons.OK,
+                System.Windows.Forms.MessageBoxIcon.Error);
+        }
     }
 }

@@ -46,7 +46,9 @@ namespace DeepCodeAnalytics.UI.Controls
             StringFormat format = new StringFormat
             {
                 Alignment = StringAlignment.Center,
-                LineAlignment = StringAlignment.Center
+                LineAlignment = StringAlignment.Center,
+                FormatFlags = StringFormatFlags.NoWrap,
+                Trimming = StringTrimming.None
             };
             
             using (SolidBrush textBrush = new SolidBrush(this.ForeColor))
