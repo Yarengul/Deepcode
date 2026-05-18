@@ -48,6 +48,6 @@ internal static class Program
         var analizYoneticisi = new AnalizYoneticisi(analyzeService, aiFactory, embeddingService, vectorStore);
 
         ApplicationConfiguration.Initialize();
-        System.Windows.Forms.Application.Run(new Form1(analizYoneticisi));
+        System.Windows.Forms.Application.Run(new Form1(analizYoneticisi, (IConfigurationRoot)configuration));
     }
 }

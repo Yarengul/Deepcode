@@ -44,17 +44,19 @@ public class GroqService : IGeminiService
 GÖREV: Aşağıdaki C# kaynak kodunu ve Roslyn statik analiz ihlallerini inceleyerek kod kalitesi sorunlarını tespit et.
 Prensip: Clean Architecture ve SOLID kurallarını baz al.
 
-KRİTİK TALİMAT: Yanıtın SADECE ve YALNIZCA aşağıdaki JSON şemasında olmalıdır.
-Başına veya sonuna hiçbir metin, açıklama, selamlama ekleme.
-```json gibi Markdown kod blokları KESİNLİKLE KULLANMA. Sadece ham JSON yaz.
+KRİTİK TALİMATLAR:
+1. Yanıtın SADECE ve YALNIZCA aşağıdaki JSON şemasında olmalıdır.
+2. Başına veya sonuna hiçbir metin, açıklama, selamlama ekleme.
+3. ```json gibi Markdown kod blokları KESİNLİKLE KULLANMA. Sadece ham JSON yaz.
+4. ÇOK KRİTİK KURAL: JSON metin alanlarında (sorun, aciklama, cozum) KESİNLİKLE çift tırnak ("") kullanma! Kod isimlerini, değişkenleri, tırnak işaretlerini veya string ifadeleri vurgulamak için her zaman TEK TIRNAK ('') kullan. Çift tırnaklar JSON veri yapısını bozmaktadır.
 
 JSON şeması:
 {{
   ""results"": [
     {{
-      ""sorun"": ""Tespit edilen kod problemi veya kural ihlalinin kısa özeti"",
-      ""aciklama"": ""Problemin neden oluştuğunun teknik açıklaması"",
-      ""cozum"": ""Önerilen düzeltilmiş C# kodu veya çözüm adımları"",
+      ""sorun"": ""Tespit edilen kod problemi veya kural ihlalinin kısa özeti (Tek tırnak kullan)"",
+      ""aciklama"": ""Problemin neden oluştuğunun teknik açıklaması (Örn: 'ApiKey' alanı - Tek tırnak kullan!)"",
+      ""cozum"": ""Önerilen düzeltilmiş C# kodu veya çözüm adımları (C# kodundaki stringlerde ve her yerde çift tırnak yerine TEK TIRNAK kullan! Örn: string conn = 'connectionString')"",
       ""severity"": ""High veya Medium veya Low""
     }}
   ]
@@ -71,10 +73,11 @@ JSON şeması:
                 model = "llama-3.3-70b-versatile",
                 messages = new[]
                 {
+                    new { role = "system", content = "You are a C# code security analyzer. Always respond with pure JSON only matching the schema. CRITICAL: Never use double quotes (\") inside any JSON string property values. Use single quotes (') for all inline quotes, variables, and code symbols." },
                     new { role = "user", content = prompt }
                 },
-                temperature = 0.2,
-                response_format = new { type = "json_object" }
+                temperature = 0.1
+                // response_format kaldırıldı: json_validate_failed hatasına yol açıyor
             };
 
             // OpenAI uyumlu chat/completions isteği
@@ -125,10 +128,66 @@ JSON şeması:
         }
     }
 
+    /// <summary>
+    /// Gelen yanıttan JSON bloğunu çıkarır.
+    /// Markdown, prefix/suffix metinleri veya olası düşünme bloklarını temizler.
+    /// </summary>
     private static string TemizleMarkdownBloklari(string rawText)
     {
-        var match = Regex.Match(rawText, @"```(?:json)?\s*([\s\S]*?)\s*```");
-        return match.Success ? match.Groups[1].Value.Trim() : rawText.Trim();
+        if (string.IsNullOrWhiteSpace(rawText)) return "{}";
+
+        // 0. <think> ... </think> düşünme bloğunu tamamen kaldır
+        rawText = Regex.Replace(rawText, @"<think>[\s\S]*?</think>", "", RegexOptions.IgnoreCase);
+
+        // 1. Markdown ```json ... ``` bloğu
+        var mdMatch = Regex.Match(rawText, @"```(?:json)?\s*([\s\S]*?)\s*```");
+        if (mdMatch.Success) return mdMatch.Groups[1].Value.Trim();
+
+        // 2. İlk { ile son } arasını al (en güvenli yöntem)
+        int first = rawText.IndexOf('{');
+        int last  = rawText.LastIndexOf('}');
+        if (first >= 0 && last > first)
+            return rawText[first..(last + 1)].Trim();
+
+        return rawText.Trim();
+    }
+
+    private static string EscapeNewlinesInJsonStrings(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return json;
+        var sb = new StringBuilder();
+        bool inString = false;
+        bool escaped = false;
+        for (int i = 0; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (c == '"' && !escaped)
+            {
+                inString = !inString;
+                sb.Append(c);
+            }
+            else if (inString && (c == '\n' || c == '\r'))
+            {
+                sb.Append("\\n");
+                if (c == '\r' && i + 1 < json.Length && json[i + 1] == '\n')
+                {
+                    i++; // Skip \n of \r\n
+                }
+            }
+            else
+            {
+                sb.Append(c);
+                if (inString)
+                {
+                    escaped = (c == '\\' && !escaped);
+                }
+                else
+                {
+                    escaped = false;
+                }
+            }
+        }
+        return sb.ToString();
     }
 
     /// <summary>
@@ -138,6 +197,7 @@ JSON şeması:
     {
         try
         {
+            cleanedJson = EscapeNewlinesInJsonStrings(cleanedJson);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var parsed = JsonSerializer.Deserialize<GroqRawResponse>(cleanedJson, options);
 
@@ -154,9 +214,9 @@ JSON şeması:
 
             return new GeminiAnalysisResult { IsSuccess = true, Cards = cards };
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
-            return GeminiAnalysisResult.Failure("AI'dan gelen yanıt geçerli bir JSON formatında değil. Lütfen tekrar deneyin.");
+            return GeminiAnalysisResult.Failure($"JSON Ayrıştırma Hatası: {ex.Message} | Ham Yanıt: {cleanedJson}");
         }
     }
 

@@ -68,14 +68,13 @@ public class OpenRouterService : IGeminiService
 
             var requestBody = new
             {
-                model = "deepseek/deepseek-v4-flash:free", // Sabit ve kararlı bir ücretsiz model kullanıyoruz
+                model = "deepseek/deepseek-v4-flash:free", // Confirmed working free model
                 messages = new[]
                 {
                     new { role = "system", content = systemPrompt },
                     new { role = "user", content = userPrompt }
                 },
                 temperature = 0.1
-                // response_format = new { type = "json_object" } // Kaldırıldı: Çoğu ücretsiz model bunu desteklemediği için hata fırlatıyor.
             };
 
             var url = "https://openrouter.ai/api/v1/chat/completions";
@@ -106,20 +105,28 @@ public class OpenRouterService : IGeminiService
                 return GeminiAnalysisResult.Failure($"OpenRouter API'ye ulaşılamadı. Son hata: {retryEx.Message}");
             }
 
+            var jsonStr = await response.Content.ReadAsStringAsync(cancellationToken);
+
             if (response.StatusCode == HttpStatusCode.TooManyRequests)
-                return GeminiAnalysisResult.Failure("OpenRouter API istek limiti aşıldı.");
+                return GeminiAnalysisResult.Failure($"OpenRouter API istek limiti aşıldı. Yanıt: {jsonStr}");
 
             if (!response.IsSuccessStatusCode)
             {
-                var errorBody = await response.Content.ReadAsStringAsync();
-                return GeminiAnalysisResult.Failure($"OpenRouter API isteği başarısız. HTTP {(int)response.StatusCode}: {errorBody}");
+                return GeminiAnalysisResult.Failure($"OpenRouter API isteği başarısız. HTTP {(int)response.StatusCode}: {jsonStr}");
             }
 
             var rawText = "";
-            var jsonStr = await response.Content.ReadAsStringAsync(cancellationToken);
             try
             {
                 using var jsonDocument = JsonDocument.Parse(jsonStr);
+
+                // OpenRouter 200 OK dönmesine rağmen JSON içinde bir hata nesnesi barındırıyorsa
+                if (jsonDocument.RootElement.TryGetProperty("error", out var errorProp))
+                {
+                    string errMsg = errorProp.TryGetProperty("message", out var msgProp) ? msgProp.GetString() ?? "" : "Bilinmeyen hata";
+                    string errCode = errorProp.TryGetProperty("code", out var codeProp) ? codeProp.ToString() : "0";
+                    return GeminiAnalysisResult.Failure($"OpenRouter Hata ({errCode}): {errMsg}");
+                }
 
                 rawText = jsonDocument.RootElement
                                   .GetProperty("choices")[0]
@@ -132,7 +139,7 @@ public class OpenRouterService : IGeminiService
             }
             catch (Exception ex)
             {
-                return GeminiAnalysisResult.Failure($"Beklenmedik hata (KeyNotFound): {ex.Message} | Gelen JSON: {jsonStr}");
+                return GeminiAnalysisResult.Failure($"Beklenmedik hata: {ex.Message} | Gelen JSON: {jsonStr}");
             }
         }
         catch (Exception ex)
@@ -141,16 +148,73 @@ public class OpenRouterService : IGeminiService
         }
     }
 
+    /// <summary>
+    /// Gelen yanıttan JSON bloğunu çıkarır.
+    /// DeepSeek R1 gibi modellerin ürettiği <think>...</think> düşünme bloklarını temizler.
+    /// </summary>
     private static string TemizleMarkdownBloklari(string rawText)
     {
-        var match = Regex.Match(rawText, @"```(?:json)?\s*([\s\S]*?)\s*```");
-        return match.Success ? match.Groups[1].Value.Trim() : rawText.Trim();
+        if (string.IsNullOrWhiteSpace(rawText)) return "{}";
+
+        // 0. <think> ... </think> düşünme bloğunu tamamen kaldır (DeepSeek R1 için kritik)
+        rawText = Regex.Replace(rawText, @"<think>[\s\S]*?</think>", "", RegexOptions.IgnoreCase);
+
+        // 1. Markdown ```json ... ``` bloğu
+        var mdMatch = Regex.Match(rawText, @"```(?:json)?\s*([\s\S]*?)\s*```");
+        if (mdMatch.Success) return mdMatch.Groups[1].Value.Trim();
+
+        // 2. İlk { ile son } arasını al (en güvenli yöntem)
+        int first = rawText.IndexOf('{');
+        int last  = rawText.LastIndexOf('}');
+        if (first >= 0 && last > first)
+            return rawText[first..(last + 1)].Trim();
+
+        return rawText.Trim();
+    }
+
+    private static string EscapeNewlinesInJsonStrings(string json)
+    {
+        if (string.IsNullOrEmpty(json)) return json;
+        var sb = new StringBuilder();
+        bool inString = false;
+        bool escaped = false;
+        for (int i = 0; i < json.Length; i++)
+        {
+            char c = json[i];
+            if (c == '"' && !escaped)
+            {
+                inString = !inString;
+                sb.Append(c);
+            }
+            else if (inString && (c == '\n' || c == '\r'))
+            {
+                sb.Append("\\n");
+                if (c == '\r' && i + 1 < json.Length && json[i + 1] == '\n')
+                {
+                    i++; // Skip \n of \r\n
+                }
+            }
+            else
+            {
+                sb.Append(c);
+                if (inString)
+                {
+                    escaped = (c == '\\' && !escaped);
+                }
+                else
+                {
+                    escaped = false;
+                }
+            }
+        }
+        return sb.ToString();
     }
 
     private static GeminiAnalysisResult ParseGeminiJsonToResult(string cleanedJson)
     {
         try
         {
+            cleanedJson = EscapeNewlinesInJsonStrings(cleanedJson);
             var options = new JsonSerializerOptions { PropertyNameCaseInsensitive = true };
             var parsed = JsonSerializer.Deserialize<GeminiRawResponse>(cleanedJson, options);
 

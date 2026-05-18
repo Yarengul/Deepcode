@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Drawing2D;
+using System.IO;
 using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text.Json;
@@ -12,6 +13,7 @@ using DeepCodeAnalytics.Application.Interfaces;
 using DeepCodeAnalytics.Domain.Entities;
 using DeepCodeAnalytics.Infrastructure.Analyzers;
 using DeepCodeAnalytics.UI.Controls;
+using Microsoft.Extensions.Configuration;
 
 namespace DeepCodeAnalytics.UI;
 
@@ -95,6 +97,27 @@ public partial class Form1 : Form
     private int _sidebarFadeAlpha;
     private readonly System.Windows.Forms.Timer _sidebarFadeTimer;
 
+    // ===== Pages (Settings / About / History) =====
+    private readonly Panel _pnlContentHost = new();
+    private readonly TableLayoutPanel _pnlDashboard = new();
+    private readonly Panel _pnlPageSettings = new();
+    private readonly Panel _pnlPageAbout = new();
+    private readonly Panel _pnlPageHistory = new();
+
+    // Settings page controls
+    private readonly TextBox _txtGeminiKey = new();
+    private readonly TextBox _txtGroqKey = new();
+    private readonly TextBox _txtOpenRouterKey = new();
+    private readonly Label _lblSettingsStatus = new();
+
+    // History
+    private sealed record HistoryEntry(DateTime At, string Preview, int Total, int High, int Med, int Low, string Engine);
+    private readonly List<HistoryEntry> _history = new();
+    private readonly FlowLayoutPanel _flpHistoryList = new();
+
+    // Config root for saving API keys dynamically
+    private IConfigurationRoot? _configRoot;
+
     private static readonly Color SidebarBg = Color.FromArgb(11, 14, 20);
     private static readonly Color HoverTint = Color.FromArgb(18, 22, 32);
     private static readonly Color InactiveText = Color.FromArgb(160, 165, 180);
@@ -108,14 +131,10 @@ public partial class Form1 : Form
     /// <summary>
     /// Ana form. Analiz yöneticisi constructor'dan enjekte edilir.
     /// </summary>
-    public Form1(AnalizYoneticisi analizYoneticisi)
+    public Form1(AnalizYoneticisi analizYoneticisi, IConfigurationRoot? configRoot = null)
     {
-        // --- Eski Backend Entegrasyon Kodları (Referans Amaçlı Korunmuştur) ---
-        // private KodAnalizServisi _kodAnalizServisi;
-        // public void SonuclariGoster(AnalizSonucu sonuc) { ... }
-        // private void btnAnalizEt_Click(object sender, EventArgs e) { ... }
-        // ----------------------------------------------------------------------
         _analizYoneticisi = analizYoneticisi;
+        _configRoot = configRoot;
 
         DoubleBuffered = true;
         SetStyle(ControlStyles.OptimizedDoubleBuffer | ControlStyles.AllPaintingInWmPaint, true);
@@ -236,17 +255,32 @@ public partial class Form1 : Form
         _pnlTopHeader.Controls.Add(_btnAnalizEt);
         _pnlTopHeader.Controls.Add(_lblStatusDot);
 
-        // Main table
+        // Main table (2 cols: sidebar + content host)
         _tblMain.Dock = DockStyle.Fill;
         _tblMain.BackColor = Color.FromArgb(18, 18, 18);
         _tblMain.CellBorderStyle = TableLayoutPanelCellBorderStyle.None;
-        _tblMain.ColumnCount = 3;
+        _tblMain.ColumnCount = 2;
         _tblMain.RowCount = 1;
         _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 240F));
         _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
-        _tblMain.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400F));
         _tblMain.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
         _tblRoot.Controls.Add(_tblMain, 0, 1);
+
+        // Content host (wraps dashboard + page overlays)
+        _pnlContentHost.Dock = DockStyle.Fill;
+        _pnlContentHost.BackColor = Color.FromArgb(18, 18, 18);
+        _tblMain.Controls.Add(_pnlContentHost, 1, 0);
+
+        // Dashboard inner layout (center + right)
+        _pnlDashboard.Dock = DockStyle.Fill;
+        _pnlDashboard.BackColor = Color.FromArgb(18, 18, 18);
+        _pnlDashboard.CellBorderStyle = TableLayoutPanelCellBorderStyle.None;
+        _pnlDashboard.ColumnCount = 2;
+        _pnlDashboard.RowCount = 1;
+        _pnlDashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100F));
+        _pnlDashboard.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 400F));
+        _pnlDashboard.RowStyles.Add(new RowStyle(SizeType.Percent, 100F));
+        _pnlContentHost.Controls.Add(_pnlDashboard);
 
         // Sidebar
         _pnlSidebar.Dock = DockStyle.Fill;
@@ -285,7 +319,7 @@ public partial class Form1 : Form
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Percent, 60F));  // editor
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Absolute, 1F));  // divider
         _tblCenter.RowStyles.Add(new RowStyle(SizeType.Percent, 40F));  // AI
-        _tblMain.Controls.Add(_tblCenter, 1, 0);
+        _pnlDashboard.Controls.Add(_tblCenter, 0, 0);
 
         _pnlCenterDivider.Dock = DockStyle.Fill;
         _pnlCenterDivider.BackColor = Border333;
@@ -440,7 +474,7 @@ public partial class Form1 : Form
         _pnlRight.BackColor = Color.FromArgb(18, 18, 18);
         _pnlRight.Padding = new Padding(20);
         _pnlRight.BorderStyle = BorderStyle.None;
-        _tblMain.Controls.Add(_pnlRight, 2, 0);
+        _pnlDashboard.Controls.Add(_pnlRight, 1, 0);
 
         _pnlResults.Dock = DockStyle.Fill;
         _pnlResults.BackColor = Color.FromArgb(18, 18, 18);
@@ -498,6 +532,22 @@ public partial class Form1 : Form
         _pnlResults.Controls.Add(_pnlResultsHeader);
 
         _pnlRight.Controls.Add(_pnlResults);
+
+        // Build and register page panels
+        BuildSettingsPage();
+        BuildAboutPage();
+        BuildHistoryPage();
+
+        _pnlPageSettings.Dock = DockStyle.Fill;
+        _pnlPageAbout.Dock = DockStyle.Fill;
+        _pnlPageHistory.Dock = DockStyle.Fill;
+        _pnlPageSettings.Visible = false;
+        _pnlPageAbout.Visible = false;
+        _pnlPageHistory.Visible = false;
+
+        _pnlContentHost.Controls.Add(_pnlPageSettings);
+        _pnlContentHost.Controls.Add(_pnlPageAbout);
+        _pnlContentHost.Controls.Add(_pnlPageHistory);
     }
 
     private static void ConfigureEditorPill(Label lbl, string text)
@@ -673,12 +723,22 @@ public partial class Form1 : Form
         try
         {
             var selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.Groq;
-            if (_cmbAiProvider.SelectedItem?.ToString() == "Gemini") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.Gemini;
-            else if (_cmbAiProvider.SelectedItem?.ToString() == "OpenRouter") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.OpenRouter;
+            string engineName = _cmbAiProvider.SelectedItem?.ToString() ?? "Groq";
+            if (engineName == "Gemini") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.Gemini;
+            else if (engineName == "OpenRouter") selectedEngine = DeepCodeAnalytics.Application.Enums.AiEngineType.OpenRouter;
 
             var result = await _analizYoneticisi.AnalizEtAsync(code, selectedEngine);
             RenderIssues(result.Issues);
             RenderAiSuggestions(result.Suggestions.FirstOrDefault()?.SuggestionText);
+
+            // Geçmiş kaydı
+            int high = result.Issues.Count(i => i.Severity.Equals("High", StringComparison.OrdinalIgnoreCase));
+            int med  = result.Issues.Count(i => i.Severity.Equals("Medium", StringComparison.OrdinalIgnoreCase));
+            int low  = result.Issues.Count(i => i.Severity.Equals("Low", StringComparison.OrdinalIgnoreCase));
+            string preview = code.Replace(Environment.NewLine, " ").Trim();
+            if (preview.Length > 60) preview = preview[..60] + "...";
+            _history.Insert(0, new HistoryEntry(DateTime.Now, preview, result.Issues.Count, high, med, low, engineName));
+            if (_history.Count > 20) _history.RemoveAt(_history.Count - 1);
         }
         catch (Exception ex)
         {
@@ -1227,6 +1287,24 @@ public partial class Form1 : Form
 
         previous?.Invalidate();
         btn.Invalidate();
+
+        NavigateToPage(btn);
+    }
+
+    private void NavigateToPage(Button btn)
+    {
+        bool isDashboard = btn == _btnDashboard;
+        bool isSettings  = btn == _btnSettings;
+        bool isAbout     = btn == _btnAbout;
+        bool isHistory   = btn == _btnHistory;
+
+        _pnlDashboard.Visible    = isDashboard;
+        _pnlPageSettings.Visible = isSettings;
+        _pnlPageAbout.Visible    = isAbout;
+        _pnlPageHistory.Visible  = isHistory;
+
+        if (isSettings) LoadApiKeysToForm();
+        if (isHistory)  RefreshHistoryPage();
     }
 
     private void SidebarFadeTimer_Tick(object? sender, EventArgs e)
@@ -1394,5 +1472,390 @@ public partial class Form1 : Form
 
         Apply(root);
     }
+
+    // =============================================
+    // SETTINGS PAGE
+    // =============================================
+    private void BuildSettingsPage()
+    {
+        _pnlPageSettings.BackColor = Color.FromArgb(18, 18, 18);
+        _pnlPageSettings.Padding = new Padding(40);
+
+        var title = new Label
+        {
+            Text = "⚙ Ayarlar",
+            Font = new Font("Segoe UI", 18F, FontStyle.Bold),
+            ForeColor = Color.White,
+            AutoSize = true,
+            Location = new Point(40, 40)
+        };
+
+        var subtitle = new Label
+        {
+            Text = "API anahtarlarınızı buradan yönetin. Değişiklikler hemen uygulanır.",
+            Font = new Font("Segoe UI", 10F),
+            ForeColor = Color.FromArgb(150, 155, 170),
+            AutoSize = true,
+            Location = new Point(40, 80)
+        };
+
+        // Divider
+        var divider = new Panel { BackColor = Color.FromArgb(50, 55, 65), Height = 1, Left = 40, Top = 108, Width = 600 };
+
+        int cardTop = 130;
+        var geminiCard  = BuildApiKeyCard("🔵 Google Gemini (Gemini 2.5 Flash)", "AIzaSy...", _txtGeminiKey, cardTop);
+        var groqCard    = BuildApiKeyCard("⚡ Groq (Llama-3.3-70b)", "gsk_...", _txtGroqKey, cardTop + 110);
+        var orCard      = BuildApiKeyCard("🌐 OpenRouter (DeepSeek V4 Flash)", "sk-or-v1-...", _txtOpenRouterKey, cardTop + 220);
+
+        var btnSave = new Button
+        {
+            Text = "💾  Kaydet",
+            Font = new Font("Segoe UI", 11F, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(253, 126, 20),
+            FlatStyle = FlatStyle.Flat,
+            Size = new Size(180, 44),
+            Location = new Point(40, cardTop + 340),
+            Cursor = Cursors.Hand
+        };
+        btnSave.FlatAppearance.BorderSize = 0;
+        btnSave.Click += (_, _) => SaveApiKeys();
+        btnSave.MouseEnter += (_, _) => btnSave.BackColor = Color.FromArgb(255, 146, 40);
+        btnSave.MouseLeave += (_, _) => btnSave.BackColor = Color.FromArgb(253, 126, 20);
+
+        _lblSettingsStatus.AutoSize = true;
+        _lblSettingsStatus.Location = new Point(235, cardTop + 353);
+        _lblSettingsStatus.Font = new Font("Segoe UI", 10F);
+        _lblSettingsStatus.ForeColor = Color.FromArgb(60, 179, 113);
+        _lblSettingsStatus.Text = "";
+
+        _pnlPageSettings.Controls.Add(title);
+        _pnlPageSettings.Controls.Add(subtitle);
+        _pnlPageSettings.Controls.Add(divider);
+        _pnlPageSettings.Controls.Add(geminiCard);
+        _pnlPageSettings.Controls.Add(groqCard);
+        _pnlPageSettings.Controls.Add(orCard);
+        _pnlPageSettings.Controls.Add(btnSave);
+        _pnlPageSettings.Controls.Add(_lblSettingsStatus);
+    }
+
+    private static Panel BuildApiKeyCard(string providerName, string placeholder, TextBox txt, int top)
+    {
+        var card = new Panel
+        {
+            BackColor = Color.FromArgb(26, 30, 40),
+            Location = new Point(40, top),
+            Size = new Size(640, 90),
+            BorderStyle = BorderStyle.None
+        };
+
+        var lbl = new Label
+        {
+            Text = providerName,
+            Font = new Font("Segoe UI", 10F, FontStyle.Bold),
+            ForeColor = Color.FromArgb(200, 210, 225),
+            AutoSize = true,
+            Location = new Point(14, 12)
+        };
+
+        txt.Location = new Point(14, 38);
+        txt.Size = new Size(598, 30);
+        txt.BackColor = Color.FromArgb(15, 18, 26);
+        txt.ForeColor = Color.FromArgb(212, 212, 212);
+        txt.Font = new Font("Cascadia Code", 9.5F);
+        txt.BorderStyle = BorderStyle.FixedSingle;
+        txt.PlaceholderText = placeholder;
+        txt.PasswordChar = '●';
+
+        // Show/hide toggle
+        var btnToggle = new Button
+        {
+            Text = "👁",
+            Size = new Size(34, 30),
+            Location = new Point(578, 38),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = Color.FromArgb(45, 50, 65),
+            ForeColor = Color.White,
+            Cursor = Cursors.Hand,
+            Font = new Font("Segoe UI Emoji", 10F)
+        };
+        btnToggle.FlatAppearance.BorderSize = 0;
+        btnToggle.Click += (_, _) => txt.PasswordChar = txt.PasswordChar == '\0' ? '●' : '\0';
+
+        card.Controls.Add(lbl);
+        card.Controls.Add(txt);
+        card.Controls.Add(btnToggle);
+        return card;
+    }
+
+    private void LoadApiKeysToForm()
+    {
+        try
+        {
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            if (!System.IO.File.Exists(path)) return;
+            var json = System.Text.Json.JsonDocument.Parse(System.IO.File.ReadAllText(path));
+            _txtGeminiKey.Text     = json.RootElement.TryGetProperty("Gemini", out var g)     ? g.GetProperty("ApiKey").GetString() ?? "" : "";
+            _txtGroqKey.Text       = json.RootElement.TryGetProperty("Groq", out var gr)      ? gr.GetProperty("ApiKey").GetString() ?? "" : "";
+            _txtOpenRouterKey.Text = json.RootElement.TryGetProperty("OpenRouter", out var or) ? or.GetProperty("ApiKey").GetString() ?? "" : "";
+            _lblSettingsStatus.Text = "";
+        }
+        catch { /* Dosya yoksa boş bırak */ }
+    }
+
+    private void SaveApiKeys()
+    {
+        try
+        {
+            var settings = new
+            {
+                Gemini     = new { ApiKey = _txtGeminiKey.Text.Trim() },
+                Groq       = new { ApiKey = _txtGroqKey.Text.Trim() },
+                OpenRouter = new { ApiKey = _txtOpenRouterKey.Text.Trim() }
+            };
+            string path = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "appsettings.json");
+            var opts = new System.Text.Json.JsonSerializerOptions { WriteIndented = true };
+            System.IO.File.WriteAllText(path, System.Text.Json.JsonSerializer.Serialize(settings, opts));
+
+            _configRoot?.Reload();
+
+            _lblSettingsStatus.ForeColor = Color.FromArgb(60, 179, 113);
+            _lblSettingsStatus.Text = "✓ API anahtarları kaydedildi!";
+        }
+        catch (Exception ex)
+        {
+            _lblSettingsStatus.ForeColor = Color.FromArgb(220, 53, 69);
+            _lblSettingsStatus.Text = $"✗ Hata: {ex.Message}";
+        }
+    }
+
+    // =============================================
+    // ABOUT PAGE
+    // =============================================
+    private void BuildAboutPage()
+    {
+        _pnlPageAbout.BackColor = Color.FromArgb(18, 18, 18);
+
+        var scroll = new Panel { Dock = DockStyle.Fill, AutoScroll = true, BackColor = Color.FromArgb(18, 18, 18) };
+
+        // Hero
+        var hero = new Panel { BackColor = Color.FromArgb(11, 14, 20), Height = 160, Dock = DockStyle.Top };
+        var logoLbl = new Label { Text = "DC", Font = new Font("Segoe UI", 28F, FontStyle.Bold), ForeColor = Color.White, BackColor = Color.FromArgb(0, 122, 204), Size = new Size(70, 70), TextAlign = ContentAlignment.MiddleCenter, Location = new Point(40, 44) };
+        var heroTitle = new Label { Text = "DeepCode Analytics", Font = new Font("Segoe UI", 20F, FontStyle.Bold), ForeColor = Color.White, AutoSize = true, Location = new Point(126, 50) };
+        var heroSub = new Label { Text = "AI-Powered Code Analysis Platform  •  v1.0.0", Font = new Font("Segoe UI", 10F), ForeColor = Color.FromArgb(150, 155, 170), AutoSize = true, Location = new Point(126, 88) };
+        hero.Controls.Add(logoLbl); hero.Controls.Add(heroTitle); hero.Controls.Add(heroSub);
+
+        // Stats row (Increased height to 110 for better spacing)
+        var statsPanel = new TableLayoutPanel { Height = 110, Dock = DockStyle.Top, ColumnCount = 4, BackColor = Color.FromArgb(18, 18, 18), Padding = new Padding(30, 10, 30, 10) };
+        statsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        statsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        statsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        statsPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 25F));
+        statsPanel.Controls.Add(BuildStatCard("846", "RAG Kayıt"), 0, 0);
+        statsPanel.Controls.Add(BuildStatCard("6", "Analyzer"), 1, 0);
+        statsPanel.Controls.Add(BuildStatCard("3", "AI Motor"), 2, 0);
+        statsPanel.Controls.Add(BuildStatCard("1580", "Vektör Boyutu"), 3, 0);
+
+        // Info cards (3 Columns, TableLayoutPanel for absolute alignment)
+        var infoPanel = new TableLayoutPanel { Height = 330, Dock = DockStyle.Top, ColumnCount = 3, BackColor = Color.FromArgb(18, 18, 18), Padding = new Padding(30, 10, 30, 10) };
+        infoPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        infoPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+        infoPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 33.33F));
+
+        var cardAbout = BuildInfoCard("🎯 Proje Hakkında",
+            "DeepCode Analytics, Roslyn tabanlı statik analiz ile RAG (Retrieval-Augmented Generation) yapay zeka analizini harmanlayan yenilikçi bir kod güvenliği platformudur.\n\nUygulama, kod tabanınızdaki SQL Injection, Hardcoded Secrets ve Boş Catch Blokları gibi kritik zafiyetleri anında yakalar.");
+
+        var cardHowTo = BuildInfoCard("⚙️ Nasıl Çalıştırılır & Kullanılır?",
+            "1. Sol menüden ⚙️ Ayarlar sekmesine gidin, API anahtarlarınızı girip Kaydet butonuna basın.\n\n2. 📁 Dosya Yükle ile C# kod dosyasını yükleyin ya da kod alanına doğrudan yapıştırın.\n\n3. Sağ üstten tercih ettiğiniz AI motorunu seçip ▶️ Analiz Et butonuna basarak süreci başlatın.");
+
+        var cardTech = BuildInfoCard("🔬 Kullanılan Teknolojiler",
+            "• Geliştirme Ortamı: .NET 8.0 & WinForms (High-DPI)\n• Statik Analiz: Microsoft Roslyn AST\n• RAG Altyapısı: Yerel TF-IDF & Kosinüs Benzerliği (1580 Vektör Boyutu)\n• AI Servisleri: Gemini 1.5 Flash, Groq Llama-3.3, OpenRouter DeepSeek\n• Dayanıklılık: Polly Async Retry & Fallback\n• Mimari: Clean Architecture + DI");
+
+        infoPanel.Controls.Add(cardAbout, 0, 0);
+        infoPanel.Controls.Add(cardHowTo, 1, 0);
+        infoPanel.Controls.Add(cardTech, 2, 0);
+
+        scroll.Controls.Add(infoPanel);
+        scroll.Controls.Add(statsPanel);
+        scroll.Controls.Add(hero);
+
+        _pnlPageAbout.Controls.Add(scroll);
+    }
+
+    private static Panel BuildStatCard(string value, string label)
+    {
+        var card = new Panel { BackColor = Color.FromArgb(26, 30, 40), Margin = new Padding(6), Dock = DockStyle.Fill };
+        
+        var valLbl = new Label 
+        { 
+            Text = value, 
+            Font = new Font("Segoe UI", 22F, FontStyle.Bold), 
+            ForeColor = Color.FromArgb(0, 178, 255), 
+            TextAlign = ContentAlignment.MiddleCenter, 
+            Size = new Size(160, 44),
+            Location = new Point(0, 12),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+
+        var lblLbl = new Label 
+        { 
+            Text = label, 
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold), 
+            ForeColor = Color.FromArgb(140, 150, 170), 
+            TextAlign = ContentAlignment.MiddleCenter, 
+            Size = new Size(160, 24),
+            Location = new Point(0, 56),
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right
+        };
+
+        card.SizeChanged += (s, e) =>
+        {
+            valLbl.Width = card.Width;
+            lblLbl.Width = card.Width;
+        };
+
+        card.Controls.Add(valLbl);
+        card.Controls.Add(lblLbl);
+        return card;
+    }
+
+    private static Panel BuildInfoCard(string title, string content)
+    {
+        var card = new Panel { BackColor = Color.FromArgb(26, 30, 40), Margin = new Padding(6), Dock = DockStyle.Fill };
+        var t = new Label { Text = title, Font = new Font("Segoe UI", 11F, FontStyle.Bold), ForeColor = Color.FromArgb(0, 178, 255), AutoSize = true, Location = new Point(16, 16) };
+        var c = new Label 
+        { 
+            Text = content, 
+            Font = new Font("Segoe UI", 9.5F), 
+            ForeColor = Color.FromArgb(200, 210, 225), 
+            Location = new Point(16, 48), 
+            Size = new Size(200, 200), // Will be resized dynamically
+            Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right,
+            UseCompatibleTextRendering = false
+        };
+
+        card.SizeChanged += (s, e) =>
+        {
+            c.Size = new Size(card.Width - 32, card.Height - 64);
+        };
+
+        card.Controls.Add(t);
+        card.Controls.Add(c);
+        return card;
+    }
+
+    // =============================================
+    // HISTORY PAGE
+    // =============================================
+    private void BuildHistoryPage()
+    {
+        _pnlPageHistory.BackColor = Color.FromArgb(18, 18, 18);
+
+        var header = new Panel { Dock = DockStyle.Top, Height = 70, BackColor = Color.FromArgb(11, 14, 20), Padding = new Padding(40, 0, 40, 0) };
+        var titleLbl = new Label { Text = "🕒 Analiz Geçmişi", Font = new Font("Segoe UI", 16F, FontStyle.Bold), ForeColor = Color.White, AutoSize = true, Location = new Point(40, 22) };
+
+        var btnClear = new Button
+        {
+            Text = "🗑 Temizle",
+            Font = new Font("Segoe UI", 9F, FontStyle.Bold),
+            ForeColor = Color.White,
+            BackColor = Color.FromArgb(80, 30, 30),
+            FlatStyle = FlatStyle.Flat,
+            Size = new Size(110, 34),
+            Location = new Point(header.Width - 150, 18),
+            Cursor = Cursors.Hand,
+            Anchor = AnchorStyles.Right | AnchorStyles.Top
+        };
+        btnClear.FlatAppearance.BorderSize = 0;
+        btnClear.Click += (_, _) => { _history.Clear(); RefreshHistoryPage(); };
+
+        header.Controls.Add(titleLbl);
+        header.Controls.Add(btnClear);
+
+        _flpHistoryList.Dock = DockStyle.Fill;
+        _flpHistoryList.FlowDirection = FlowDirection.TopDown;
+        _flpHistoryList.WrapContents = false;
+        _flpHistoryList.AutoScroll = true;
+        _flpHistoryList.Padding = new Padding(30, 10, 30, 10);
+        _flpHistoryList.BackColor = Color.FromArgb(18, 18, 18);
+
+        _pnlPageHistory.Controls.Add(_flpHistoryList);
+        _pnlPageHistory.Controls.Add(header);
+    }
+
+    private void RefreshHistoryPage()
+    {
+        _flpHistoryList.Controls.Clear();
+
+        if (_history.Count == 0)
+        {
+            _flpHistoryList.Controls.Add(new Label
+            {
+                Text = "Henüz analiz yapılmadı.\nKod Analizi sekmesinden bir analiz çalıştırın.",
+                Font = new Font("Segoe UI", 11F),
+                ForeColor = Color.FromArgb(120, 130, 150),
+                AutoSize = true,
+                Margin = new Padding(0, 20, 0, 0)
+            });
+            return;
+        }
+
+        foreach (var entry in _history)
+        {
+            var card = new Panel
+            {
+                BackColor = Color.FromArgb(26, 30, 40),
+                Width = _flpHistoryList.ClientSize.Width - SystemInformation.VerticalScrollBarWidth - 20,
+                Height = 80,
+                Margin = new Padding(0, 0, 0, 8)
+            };
+
+            var timeLbl = new Label
+            {
+                Text = entry.At.ToString("dd.MM.yyyy  HH:mm:ss"),
+                Font = new Font("Cascadia Code", 8.5F),
+                ForeColor = Color.FromArgb(100, 110, 130),
+                AutoSize = true,
+                Location = new Point(14, 10)
+            };
+
+            var previewLbl = new Label
+            {
+                Text = entry.Preview,
+                Font = new Font("Segoe UI", 9.5F),
+                ForeColor = Color.FromArgb(210, 215, 225),
+                AutoSize = false,
+                Size = new Size(card.Width - 180, 24),
+                Location = new Point(14, 32)
+            };
+
+            var engineBadge = new Label
+            {
+                Text = entry.Engine,
+                Font = new Font("Segoe UI", 8F, FontStyle.Bold),
+                ForeColor = Color.White,
+                BackColor = Color.FromArgb(0, 100, 180),
+                Size = new Size(80, 20),
+                TextAlign = ContentAlignment.MiddleCenter,
+                Location = new Point(card.Width - 100, 10)
+            };
+
+            var statsLbl = new Label
+            {
+                Text = $"🔴 {entry.High}  🟡 {entry.Med}  🔵 {entry.Low}  •  Toplam: {entry.Total}",
+                Font = new Font("Segoe UI", 9F),
+                ForeColor = Color.FromArgb(160, 170, 190),
+                AutoSize = true,
+                Location = new Point(14, 56)
+            };
+
+            card.Controls.Add(timeLbl);
+            card.Controls.Add(previewLbl);
+            card.Controls.Add(engineBadge);
+            card.Controls.Add(statsLbl);
+            _flpHistoryList.Controls.Add(card);
+        }
+    }
 }
+
 
